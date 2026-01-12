@@ -40,7 +40,7 @@ function getLeaderBoardFromBucketIndex(inde,limit = 30,guessMax = NaN){
         maps[index+1]=new Map();
         let CDFMax=inInverseCDF(1/(bucketCache.mapList[index+1].size)); //仿射CDF的最大值
         let ratio=guessMax/CDFMax; //与猜测的比例
-        let guessRank=inInverseCDF(limit/(bucketCache.mapList[index+1].size);
+        let guessRank=inInverseCDF(limit/(bucketCache.mapList[index+1].size));
         let deltaRank=1/ratio; //线性变换 实际差值->CDF仿射空间 相差1
         let range=CDF(guessRank)-CDF(guessRank+deltaRank); //猜测的第limit个视频需要的数量的比例
         let cacheSize=Math.ceil(bucketCache.mapList[index+1].size*range) || limit; //若没有传入guessMax则默认limit

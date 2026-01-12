@@ -18,6 +18,6 @@
   "scripts": {
     "eo-deploy": "node src/tools/eo-deploy.cjs src/server.js",
     "eo-dev": "node src/tools/eo-deploy.cjs src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.mjs"
   }
 }

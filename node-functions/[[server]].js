@@ -7,7 +7,6 @@ import { createChallenge, verifySolution } from 'altcha-lib';
 const app = express();
 
 const TIMESTAMP_EXPIRE_MS = Number(process.env.TIMESTAMP_EXPIRE_MS) || 180 * 24 * 3600 * 1000; //排行榜总数据过期时间
-const CACHE_EXPIRE_MS = Number(process.env.CACHE_EXPIRE_MS) || 1800 * 1000; // 排行榜cache过期时间
 const leaderboardTimeInterval = [24 * 3600 * 1000, 7 * 24 * 3600 * 1000, 30 * 24 * 3600 * 1000]; //排行榜相差时间
 
 // Altcha 配置
@@ -58,19 +57,12 @@ async function getLeaderBoardFromTime(periodMs = 24 * 3600 * 1000, limit = 30) {
 
 async function getCachedLeaderBoard(range) {
     try {
-        const response = await fetch(`https://api.github.com/repos/bili-qml-team/bili-qml-leaderboard-cache/contents/${range}`,
-            {
-                headers: {
-                    'Accept': 'application/vnd.github.raw+json',
-                    'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
-                    'User-Agent': 'Bili-QML-Server 1.2'
-                }
-            });
-        if (!response.ok) {
-            console.error(`Failed to fetch cached leaderboard for ${range}: ${response.status} ${response.statusText}`);
+        const response = await redis.hget('caches:leaderboard', range);
+        if (!response) {
+            console.warn(`No cached leaderboard found for range: ${range}`);
             return null;
         }
-        return await response.json();
+        return JSON.parse(response);
     } catch (error) {
         console.error(`Error fetching cached leaderboard for ${range}:`, error);
         return null;
@@ -176,13 +168,17 @@ app.get(["/api/refresh", "/refresh"], async (req, res) => {
     }
     try {
         const leaderBoardCache = {
-            expireTime: Date.now() + CACHE_EXPIRE_MS,
             caches: await Promise.all(leaderboardTimeInterval.map((time) => {
                 return getLeaderBoardFromTime(time);
             }))
         };
         console.log('Leaderboard cache updated.');
-        return res.json({ success: true, leaderBoardCache });
+        await Promise.all([
+            redis.hset('caches:leaderboard', 'daily', JSON.stringify(leaderBoardCache.caches[0])),
+            redis.hset('caches:leaderboard', 'weekly', JSON.stringify(leaderBoardCache.caches[1])),
+            redis.hset('caches:leaderboard', 'monthly', JSON.stringify(leaderBoardCache.caches[2])),
+        ]);
+        return res.json({ success: true });
     } catch (error) {
         console.error('Leaderboard Cache Update Error:', error);
         return res.status(500).json({ success: false, error: 'Failed to refresh cache' });

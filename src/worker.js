@@ -100,11 +100,11 @@ export default {
             // await env.LEADERBOARD_CACHE.put('weekly', JSON.stringify(responseJson.leaderBoardCache.caches[1]));
             // await env.LEADERBOARD_CACHE.put('monthly', JSON.stringify(responseJson.leaderBoardCache.caches[2]));
             // await updateGitHub("expireTime", String(responseJson.leaderBoardCache.expireTime));
-            await updateGitHub("daily", JSON.stringify(responseJson.leaderBoardCache.caches[0]));
-            await updateGitHub("weekly", JSON.stringify(responseJson.leaderBoardCache.caches[1]));
-            await updateGitHub("monthly", JSON.stringify(responseJson.leaderBoardCache.caches[2]));
+            // await updateGitHub("daily", JSON.stringify(responseJson.leaderBoardCache.caches[0]));
+            // await updateGitHub("weekly", JSON.stringify(responseJson.leaderBoardCache.caches[1]));
+            // await updateGitHub("monthly", JSON.stringify(responseJson.leaderBoardCache.caches[2]));
             // await purgeCache();
-            console.log(`Refresh success at ${end}, took ${(end - start) / 1000.0}s, cache: ${JSON.stringify(responseJson.leaderBoardCache)}`);
+            console.log(`Refresh success at ${end}, took ${(end - start) / 1000.0}s`);
         } else {
             console.error(`Refresh failed at ${end}`);
         }

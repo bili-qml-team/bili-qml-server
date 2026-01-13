@@ -1,5 +1,6 @@
 import { initAltcha , altchaCheck } from './altcha.mjs';
-import {getLeaderBoard,initLeaderboardManager} from './leaderboard.mjs';
+import {leaderBoard,setupRefreshFromNetwork} from './leaderboard.mjs';
+const leaderboardTimeInterval = [12 * 3600 * 1000,24 * 3600 * 1000, 7 * 24 * 3600 * 1000, 30 * 24 * 3600 * 1000]; //排行榜相差时间
 
 async function fetchTitle(list){
     return Promise.all(list.map(async (item, index) => {
@@ -28,23 +29,8 @@ async function fetchTitle(list){
 function initCoreApi(redis,app){
 
     initAltcha(redis,app);
-    initLeaderboardManager(redis);
-    // EdgeOne Pages不支持定时任务自动刷新，提供手动刷新接口，由外部定时任务调用
-    app.use(["/api/refresh", "/refresh"], async (req, res) => {
-        const authHeader = req.headers["authorization"];
-        const token = authHeader && authHeader.split(" ")[1];
-        // simple token check
-        if (!token || token !== process.env.REFRESH_TOKEN) {
-            return res.status(403).json({ message: "Token missing" });
-        }
-        try {
-            await updateLeaderBoardCache();
-            return res.json({ success: true, leaderBoardCache });
-        } catch (error) {
-            console.error('Leaderboard Cache Update Error:', error);
-            return res.status(500).json({ success: false, error: 'Failed to refresh cache' });
-        }
-    });
+    this.leaderboard=new leaderBoard(redis,leaderboardTimeInterval)
+    setupRefreshFromNetwork(this.leaderboard,app)
 
     // 处理投票
     app.post(['/api/vote', '/vote'], async (req, res) => {
@@ -112,7 +98,7 @@ function initCoreApi(redis,app){
             const rateLimitKey = `ratelimit:leaderboard:${clientIP}`;
             await altchaCheck(altcha,rateLimitKey)
 
-            const board = await getLeaderBoard(range);
+            const board = await this.leaderboard.getLeaderBoard(range);
             if (range !== 'realtime') res.set('QML-Cache-Expires', `${leaderBoardCache.expireTime}`);
             let list = board.map((array) => { return { bvid: array[0], count: array[1] } });
             // no type or type != 2: add backward capability

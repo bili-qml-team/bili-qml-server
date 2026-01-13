@@ -1,6 +1,6 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/(.*)", "destination": "src/server.ts" }
+    { "source": "/(.*)", "destination": "src/server.mts" }
   ]
 }

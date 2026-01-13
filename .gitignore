@@ -40,6 +40,9 @@ build/Release
 # Dependency directories
 node_modules/
 jspm_packages/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/

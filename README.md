@@ -19,13 +19,11 @@
 * `UPSTASH_REDIS_REST_URL`：Redis 服务访问地址
 * `UPSTASH_REDIS_REST_TOKEN`：Redis 服务访问Token
 * `ALTCHA_HMAC_KEY`：Altcha 验证码校验字符串
-* `GITHUB_TOKEN`：访问 GitHub 静态存储库（bili-qml-team/bili-qml-leaderboard-cache）的 TOKEN，若是公有仓库则此项为选填。`fine-grained tokens` 需要有 `Contents: Read` 权限；`personal access tokens (classic)` 需要有 `repo` 权限
 * `REFRESH_TOKEN`：后端 Workers 缓存服务向服务器请求更新缓存时验证的字符串，相同即为验证通过
 
 ### server.js 可选环境变量
 
 * `TIMESTAMP_EXPIRE_MS`：（默认180天）排行榜总数据过期时间（毫秒），过期数据会被删除
-* `CACHE_EXPIRE_MS`：（默认30分钟）排行榜数据缓存过期时间（毫秒）
 * `ALTCHA_COMPLEXITY`：（默认250000）Altcha 验证计算难度
 * `RATE_LIMIT_VOTE_WINDOW`: （默认300秒）频率限制投票窗口（秒）
 * `RATE_LIMIT_VOTE_MAX`：（默认10次）频率限制窗口内投票最大次数
@@ -36,8 +34,7 @@
 
 * `QML_API`：API服务器访问地址，必须支持 HTTPS
 * `REFRESH_TOKEN`：向服务器请求更新缓存时验证的字符串
-* `GITHUB_TOKEN`：更新 GitHub 静态存储库（bili-qml-team/bili-qml-leaderboard-cache）的 TOKEN。`fine-grained tokens` 需要有 `Contents: Read and Write` 权限；`personal access tokens (classic)` 需要有 `repo` 权限
-* `Cron`：设置为 `*/5 * * * *`，每5分钟向服务器请求更新缓存
+* `Cron`：设置为 `*/30 * * * *`，每 30 分钟向服务器请求更新缓存
 
 ## 接口列表
 

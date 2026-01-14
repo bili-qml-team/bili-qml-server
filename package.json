@@ -21,7 +21,7 @@
     "dotenv": "17.2.3"
   },
   "scripts": {
-    "pre-build": "node src/tools/env-test.cjs",
+    "pre-build": "node src/tools/inject-cert.mjs",
     "build": "npx tsc -p .",
     "deploy": "npm-run-all pre-build build eo",
     "eo": "node src/tools/eo-deploy.cjs dist/server.mjs",

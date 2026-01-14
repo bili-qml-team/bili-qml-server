@@ -29,7 +29,8 @@ const redis: Redis = new Redis({
     password: process.env.UPSTASH_REDIS_REST_TOKEN,
     tls: {
         key: `${process.env.REDIS_TLS_KEY}`,
-        cert: `${process.env.REDIS_TLS_CERT}`
+        cert: `${process.env.REDIS_TLS_CERT}`,
+        ca: `${process.env.REDIS_TLS_CACERT}`
     }
 });
 // 频率限制器：检查并增加计数
@@ -365,9 +366,5 @@ app.get(['/api/leaderboard', '/leaderboard'], async (req: express.Request, res: 
     }
 });
 
+// app.listen(3000);
 export default app;
-// module.exports = app;
-// const PORT = process.env.PORT || 3000;
-// app.listen(PORT, () => {
-//     console.log(`Server is running on port ${PORT}`);
-// });

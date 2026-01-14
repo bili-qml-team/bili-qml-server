@@ -14,13 +14,13 @@ async function getClientCert(filename) {
 }
 
 
-const clientCerts = {
-    key: await getClientCert('redis-client.key'),
-    cert: await getClientCert('redis-client.crt')
-}
+const [key, cert] = await Promise.all([
+    getClientCert('redis-client.key'),
+    getClientCert('redis-client.crt')
+]);
 
 const serverFilePath = path.resolve('src/server.mts');
 let serverFileContent = await fs.readFile(serverFilePath, 'utf-8');
-serverFileContent = serverFileContent.replace('${process.env.REDIS_TLS_KEY}', clientCerts.key);
-serverFileContent = serverFileContent.replace('${process.env.REDIS_TLS_CERT}', clientCerts.cert);
+serverFileContent = serverFileContent.replace('${process.env.REDIS_TLS_KEY}', key);
+serverFileContent = serverFileContent.replace('${process.env.REDIS_TLS_CERT}', cert);
 await fs.writeFile(serverFilePath, serverFileContent, 'utf-8');

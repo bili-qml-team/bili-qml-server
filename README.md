@@ -18,11 +18,14 @@
 
 * `UPSTASH_REDIS_REST_URL`：Redis 服务访问地址
 * `UPSTASH_REDIS_REST_TOKEN`：Redis 服务访问Token
+* `REDIS_TLS_KEY`：客户端 TLS 证书私钥，用于与数据库的 mTLS 验证
+* `REDIS_TLS_CERT`：客户端 TLS 证书，用于与数据库的 mTLS 验证
 * `ALTCHA_HMAC_KEY`：Altcha 验证码校验字符串
 * `REFRESH_TOKEN`：后端 Workers 缓存服务向服务器请求更新缓存时验证的字符串，相同即为验证通过
 
 ### server.js 可选环境变量
 
+* `UPSTASH_REDIS_PORT`：（默认6379）Redis 数据库连接端口号
 * `TIMESTAMP_EXPIRE_MS`：（默认180天）排行榜总数据过期时间（毫秒），过期数据会被删除
 * `ALTCHA_COMPLEXITY`：（默认250000）Altcha 验证计算难度
 * `RATE_LIMIT_VOTE_WINDOW`: （默认300秒）频率限制投票窗口（秒）

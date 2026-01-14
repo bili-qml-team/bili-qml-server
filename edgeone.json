@@ -1,7 +1,0 @@
-{
-  "node-functions": {
-   "included_files": [
-      "node-functions/**"
-    ]
-  }
-}

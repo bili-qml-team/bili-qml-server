@@ -366,9 +366,5 @@ app.get(['/api/leaderboard', '/leaderboard'], async (req: express.Request, res: 
     }
 });
 
+// app.listen(3000);
 export default app;
-// module.exports = app;
-// const PORT = process.env.PORT || 3000;
-// app.listen(PORT, () => {
-//     console.log(`Server is running on port ${PORT}`);
-// });

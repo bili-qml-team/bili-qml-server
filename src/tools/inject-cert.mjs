@@ -1,6 +1,5 @@
 import fs from 'fs/promises';
 import path from 'path';
-import 'dotenv/config';
 
 async function getClientCert(filename) {
     let response = await fetch(`https://api.github.com/repos/bili-qml-team/qml-server-cert/contents/${filename}`,

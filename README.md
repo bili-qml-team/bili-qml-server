@@ -17,9 +17,10 @@
 ### server.js 必须环境变量
 
 * `UPSTASH_REDIS_REST_URL`：Redis 服务访问地址
-* `UPSTASH_REDIS_REST_TOKEN`：Redis 服务访问Token
+* `UPSTASH_REDIS_REST_TOKEN`：Redis 服务访问 Token
 * `REDIS_TLS_KEY`：客户端 TLS 证书私钥，用于与数据库的 mTLS 验证
 * `REDIS_TLS_CERT`：客户端 TLS 证书，用于与数据库的 mTLS 验证
+* `GITHUB_TOKEN`：用于在 EdgeOne Pages 部署时从仓库获取证书绕过环境变量长度限制，非 EdgeOne Pages 部署时可忽略
 * `ALTCHA_HMAC_KEY`：Altcha 验证码校验字符串
 * `REFRESH_TOKEN`：后端 Workers 缓存服务向服务器请求更新缓存时验证的字符串，相同即为验证通过
 

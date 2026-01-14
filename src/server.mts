@@ -30,7 +30,6 @@ const redis: Redis = new Redis({
     tls: {
         key: process.env.REDIS_TLS_KEY,
         cert: process.env.REDIS_TLS_CERT,
-        ca: process.env.REDIS_TLS_CERT,
     }
 });
 

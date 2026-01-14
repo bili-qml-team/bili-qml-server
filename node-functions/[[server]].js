@@ -15,7 +15,17 @@ const RATE_LIMIT_VOTE_WINDOW = Number(process.env.RATE_LIMIT_VOTE_WINDOW) || 300
 const RATE_LIMIT_LEADERBOARD_MAX = Number(process.env.RATE_LIMIT_LEADERBOARD_MAX) || 20; // 排行榜最大次数
 const RATE_LIMIT_LEADERBOARD_WINDOW = Number(process.env.RATE_LIMIT_LEADERBOARD_WINDOW) || 300; // 排行榜窗口（秒）
 // 使用Workers KV作为缓存，见worker.js
-const redis = new Redis(`${process.env.UPSTASH_REDIS_PROTO || "redis"}://default:${process.env.UPSTASH_REDIS_REST_TOKEN}@${process.env.UPSTASH_REDIS_REST_URL}`);
+const redis = new Redis({
+    host: process.env.UPSTASH_REDIS_REST_URL,
+    port: Number(process.env.UPSTASH_REDIS_PORT) || 6379,
+    username: "default",
+    password: process.env.UPSTASH_REDIS_REST_TOKEN,
+    tls: {
+        key: process.env.REDIS_TLS_KEY,
+        cert: process.env.REDIS_TLS_CERT,
+        ca: process.env.REDIS_TLS_CERT,
+    }
+});
 // 频率限制器：检查并增加计数
 async function checkRateLimit(key, maxRequests, windowSeconds) {
     const current = await redis.incr(key);

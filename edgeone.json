@@ -1,0 +1,10 @@
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "server.mjs" }
+  ],
+  "node-functions": {
+   "included_files": [
+      "node-functions/**"
+    ]
+  }
+}

@@ -20,6 +20,7 @@
     "dotenv": "17.2.3"
   },
   "scripts": {
+    "pre-build": "node src/tools/env-test.cjs && node src/tools/eo-deploy.cjs dist/server.mjs",
     "build": "npx tsc -p . && node src/tools/eo-deploy.cjs dist/server.mjs",
     "start": "node dist/server.mjs"
   }

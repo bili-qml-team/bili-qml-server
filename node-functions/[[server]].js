@@ -21,8 +21,9 @@ const redis = new Redis({
     username: "default",
     password: process.env.UPSTASH_REDIS_REST_TOKEN,
     tls: {
-        key: process.env.REDIS_TLS_KEY,
-        cert: process.env.REDIS_TLS_CERT,
+        key: `${process.env.REDIS_TLS_KEY}`,
+        cert: `${process.env.REDIS_TLS_CERT}`,
+        ca: `${process.env.REDIS_TLS_CERT}`,
     }
 });
 // 频率限制器：检查并增加计数

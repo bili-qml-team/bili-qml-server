@@ -30,7 +30,7 @@ const redis: Redis = new Redis({
     tls: {
         key: `${process.env.REDIS_TLS_KEY}`,
         cert: `${process.env.REDIS_TLS_CERT}`,
-        ca: `${process.env.REDIS_TLS_CACERT}`,
+        ca: `${process.env.REDIS_TLS_CACERT}`
     }
 });
 // 频率限制器：检查并增加计数

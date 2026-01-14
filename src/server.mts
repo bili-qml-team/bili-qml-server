@@ -26,11 +26,7 @@ const redis: Redis = new Redis({
     host: process.env.UPSTASH_REDIS_REST_URL,
     port: Number(process.env.UPSTASH_REDIS_PORT) || 6379,
     username: "default",
-    password: process.env.UPSTASH_REDIS_REST_TOKEN,
-    tls: {
-        key: `${process.env.REDIS_TLS_KEY}`,
-        cert: `${process.env.REDIS_TLS_CERT}`
-    }
+    password: process.env.UPSTASH_REDIS_REST_TOKEN
 });
 
 // 频率限制器：检查并增加计数

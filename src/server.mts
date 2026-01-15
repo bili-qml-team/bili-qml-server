@@ -102,7 +102,7 @@ const securityCheck = (req: express.Request, res: express.Response, next: expres
 
     // 1. 拦截自动化工具 (开源安全型：不依赖秘密令牌)
     const ua: string = userAgent.toLowerCase();
-    const botKeywords: string[] = ['curl', 'python', 'httpclient', 'axios', 'node-fetch', 'go-http', 'wget', 'postman'];
+    const botKeywords: string[] = ['curl', 'python', 'httpclient', 'axios', 'fetch', 'go-http', 'wget', 'postman', 'scrapy', 'java', 'okhttp', 'httpie', 'restclient', 'reqable', 'unirest', 'httpx', 'php', 'ruby', 'perl'];
     if (botKeywords.some(kw => ua.includes(kw))) {
         return res.status(403).json({ success: false, error: 'Access Denied' });
     }

@@ -8,7 +8,7 @@ import type { Challenge } from 'altcha-lib/types';
 const app: express.Application = express();
 
 const TIMESTAMP_EXPIRE_MS: number = Number(process.env.TIMESTAMP_EXPIRE_MS) || 180 * 24 * 3600 * 1000; //排行榜总数据过期时间
-const leaderboardTimeInterval: number[] = [24 * 3600 * 1000, 7 * 24 * 3600 * 1000, 30 * 24 * 3600 * 1000]; //排行榜相差时间
+const leaderboardTimeInterval: number[] = [12 * 3600 * 1000, 24 * 3600 * 1000, 7 * 24 * 3600 * 1000, 30 * 24 * 3600 * 1000]; //排行榜相差时间
 
 // Altcha 配置
 const ALTCHA_HMAC_KEY: string = process.env.ALTCHA_HMAC_KEY || 'bili-qml-default-hmac-key-change-in-production';
@@ -20,7 +20,17 @@ const RATE_LIMIT_VOTE_WINDOW: number = Number(process.env.RATE_LIMIT_VOTE_WINDOW
 const RATE_LIMIT_LEADERBOARD_MAX: number = Number(process.env.RATE_LIMIT_LEADERBOARD_MAX) || 20; // 排行榜最大次数
 const RATE_LIMIT_LEADERBOARD_WINDOW: number = Number(process.env.RATE_LIMIT_LEADERBOARD_WINDOW) || 300; // 排行榜窗口（秒）
 
-// 使用Workers KV作为缓存，见worker.js
+// Redis Lua 脚本预加载
+const statusScriptLua: string = `return {redis.call('sismember', KEYS[1], ARGV[1]), redis.call('hget', KEYS[2], ARGV[2])}`;
+const statusScriptSha: string = "f0c6a6a82f3fa5cd22bb667e27c5ba1b1fcdbd33";
+
+const voteScriptLua: string = `local voted = redis.call('sadd', KEYS[1], ARGV[1])\nif voted == 1 then\n    redis.call('hincrby', KEYS[2], ARGV[2], 1)\n    redis.call('zadd', KEYS[3], ARGV[3], ARGV[4])\nend\nreturn voted`;
+const voteScriptSha: string = "fdd1c85ca528240976fa7af8fcce32536eadc271";
+
+const unvoteScriptLua: string = `local isMember = redis.call('sismember', KEYS[1], ARGV[1])\nif isMember == 1 then\n    redis.call('srem', KEYS[1], ARGV[1])\n    redis.call('zrem', KEYS[2], ARGV[2])\n    redis.call('hincrby', KEYS[3], ARGV[3], -1)\nend\nreturn isMember`;
+const unvoteScriptSha: string = "8c7c993d5352c20a6d0d270d862cc50c00a6cacd";
+
+// 使用 Redis 作为缓存并在 worker 刷新，见worker.js
 
 const redis: Redis = new Redis({
     host: process.env.UPSTASH_REDIS_REST_URL,
@@ -35,7 +45,7 @@ const redis: Redis = new Redis({
 });
 // 频率限制器：检查并增加计数
 async function checkRateLimit(key: string, maxRequests: number, windowSeconds: number): Promise<boolean> {
-    const current = await redis.incr(key);
+    const current: number = await redis.incr(key);
     if (current === 1) {
         await redis.expire(key, windowSeconds);
     }
@@ -80,10 +90,60 @@ async function getCachedLeaderBoard(range: string): Promise<{ bvid: string, coun
 }
 
 async function getLeaderBoard(range: string): Promise<{ bvid: string, count: number }[] | null> {
-    if (range === 'realtime') {
-        return await getLeaderBoardFromTime(12 * 3600 * 1000); //过去12小时
-    }
     return await getCachedLeaderBoard(range);
+}
+
+async function executeStatusScript(bvid: string, userId: string): Promise<[number, string | null]> {
+    try {
+        return await redis.evalsha(statusScriptSha, 2, `voted:${bvid}`, `video:${bvid}`, userId || '', 'votesTotal') as Promise<[number, string | null]>;
+    } catch (err: any) {
+        // 脚本丢失
+        try {
+            const [_, res] = await Promise.all([
+                redis.script("LOAD", statusScriptLua),
+                redis.evalsha(statusScriptSha, 2, `voted:${bvid}`, `video:${bvid}`, userId || '', 'votesTotal')
+            ]);
+            return res as Promise<[number, string | null]>;
+        } catch (err: any) {
+            err.message = `Load Script Error: ${err.message}, check script sha values.`;
+            throw err;
+        }
+
+    }
+}
+
+async function executeVoteScript(bvid: string, userId: string, timestamp: number): Promise<number> {
+    try {
+        return await redis.evalsha(voteScriptSha, 3, `voted:${bvid}`, `video:${bvid}`, 'votes:recent', userId, 'votesTotal', timestamp, `${bvid}:${userId}`) as Promise<number>;
+    } catch (err: any) {
+        try {
+            const [_, res] = await Promise.all([
+                redis.script("LOAD", voteScriptLua),
+                redis.evalsha(voteScriptSha, 3, `voted:${bvid}`, `video:${bvid}`, 'votes:recent', userId, 'votesTotal', timestamp, `${bvid}:${userId}`)
+            ]);
+            return res as Promise<number>;
+        } catch (err: any) {
+            err.message = `Load Script Error: ${err.message}, check script sha values.`;
+            throw err;
+        }
+    }
+}
+
+async function executeUnvoteScript(bvid: string, userId: string): Promise<number> {
+    try {
+        return await redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal') as Promise<number>;
+    } catch (err: any) {
+        try {
+            const [_, res] = await Promise.all([
+                redis.script("LOAD", unvoteScriptLua),
+                redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal')
+            ]);
+            return res as Promise<number>;
+        } catch (err: any) {
+            err.message = `Load Script Error: ${err.message}, check script sha values.`;
+            throw err;
+        }
+    }
 }
 
 // 服务器逻辑区
@@ -105,7 +165,7 @@ const securityCheck = (req: express.Request, res: express.Response, next: expres
 
     // 1. 拦截自动化工具 (开源安全型：不依赖秘密令牌)
     const ua: string = userAgent.toLowerCase();
-    const botKeywords: string[] = ['curl', 'python', 'httpclient', 'axios', 'node-fetch', 'go-http', 'wget', 'postman'];
+    const botKeywords: string[] = ['curl', 'python', 'httpclient', 'axios', 'fetch', 'go-http', 'wget', 'postman', 'scrapy', 'java', 'okhttp', 'httpie', 'restclient', 'reqable', 'unirest', 'httpx', 'php', 'ruby', 'perl'];
     if (botKeywords.some(kw => ua.includes(kw))) {
         return res.status(403).json({ success: false, error: 'Access Denied' });
     }
@@ -174,24 +234,23 @@ app.get(["/api/refresh", "/refresh"], async (req: express.Request, res: express.
     const token: string | undefined = authHeader && authHeader.split(" ")[1];
     // simple token check
     if (!token || token !== process.env.REFRESH_TOKEN) {
-        return res.status(403).json({ message: "Token missing" });
+        return res.status(403).json({ success: false, error: "Token missing" });
     }
     try {
-        const leaderBoardCache: { caches: { bvid: string, count: number }[][] } = {
-            caches: await Promise.all(leaderboardTimeInterval.map((time) => {
-                return getLeaderBoardFromTime(time);
-            }))
-        };
+        const leaderBoardCaches: { bvid: string, count: number }[][] = await Promise.all(leaderboardTimeInterval.map((time) => {
+            return getLeaderBoardFromTime(time);
+        }));
         console.log('Leaderboard cache updated.');
         await Promise.all([
-            redis.hset('caches:leaderboard', 'daily', JSON.stringify(leaderBoardCache.caches[0])),
-            redis.hset('caches:leaderboard', 'weekly', JSON.stringify(leaderBoardCache.caches[1])),
-            redis.hset('caches:leaderboard', 'monthly', JSON.stringify(leaderBoardCache.caches[2])),
+            redis.hset('caches:leaderboard', 'realtime', JSON.stringify(leaderBoardCaches[0])),
+            redis.hset('caches:leaderboard', 'daily', JSON.stringify(leaderBoardCaches[1])),
+            redis.hset('caches:leaderboard', 'weekly', JSON.stringify(leaderBoardCaches[2])),
+            redis.hset('caches:leaderboard', 'monthly', JSON.stringify(leaderBoardCaches[3])),
         ]);
         return res.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Leaderboard Cache Update Error:', error);
-        return res.status(500).json({ success: false, error: 'Failed to refresh cache' });
+        return res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -237,17 +296,10 @@ app.post(['/api/vote', '/vote'], async (req, res) => {
             }
         }
 
-        // 3. 用户投票记录
-        const voted: number = await redis.sadd(`voted:${bvid}`, userId);
-        if (voted === 0) return res.status(400).json({ success: false, error: 'Already Voted' });
-        // 总票统计
-
-        // 排行榜时间戳记录
+        // 3. 用户投票记录（使用 Lua 脚本原子操作）
         const now: number = Date.now();
-        await Promise.all([
-            redis.hincrby(`video:${bvid}`, 'votesTotal', 1),
-            redis.zadd('votes:recent', now, `${bvid}:${userId}`)
-        ]);
+        const voted: number = await executeVoteScript(String(bvid), String(userId), now);
+        if (voted === 0) return res.status(400).json({ success: false, error: 'Already Voted' });
         res.json({ success: true });
     } catch (error: any) {
         console.error('Vote Error:', error);
@@ -278,14 +330,8 @@ app.post(['/api/unvote', '/unvote'], async (req: express.Request, res: express.R
             }
         }
 
-        const isMember: number = await redis.sismember(`voted:${bvid}`, userId);
+        const isMember: number = await executeUnvoteScript(String(bvid), String(userId));
         if (!isMember) return res.status(400).json({ error: 'Not voted yet' });
-        // 总票处理
-        await Promise.all([
-            redis.srem(`voted:${bvid}`, userId),           // 删除投票记录
-            redis.zrem('votes:recent', `${bvid}:${userId}`), // 删除排行榜记录
-            redis.hincrby(`video:${bvid}`, 'votesTotal', -1)
-        ]);
         res.json({ success: true });
     } catch (error: any) {
         console.error('Vote Error:', error);
@@ -297,10 +343,7 @@ app.post(['/api/unvote', '/unvote'], async (req: express.Request, res: express.R
 app.get(['/api/status', '/status'], async (req: express.Request, res: express.Response) => {
     const { bvid, userId }: { bvid?: string; userId?: string } = req.query;
     try {
-        const [isVoted, totalCount]: [number, string | null] = await Promise.all([
-            redis.sismember(`voted:${bvid}`, userId || ''),
-            redis.hget(`video:${bvid}`, 'votesTotal')
-        ]);
+        const [isVoted, totalCount]: [number, string | null] = await executeStatusScript(String(bvid), String(userId));
         res.json({ success: true, active: !!isVoted, count: Number(totalCount) || 0 });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });

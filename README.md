@@ -20,7 +20,8 @@
 * `UPSTASH_REDIS_REST_TOKEN`：Redis 服务访问 Token
 * `REDIS_TLS_KEY`：客户端 TLS 证书私钥，用于与数据库的 mTLS 验证
 * `REDIS_TLS_CERT`：客户端 TLS 证书，用于与数据库的 mTLS 验证
-* `GITHUB_TOKEN`：用于在 EdgeOne Pages 部署时从仓库获取证书绕过环境变量长度限制，非 EdgeOne Pages 部署时可忽略
+* `REDIS_TLS_CACERT`：客户端 CA 根证书，用于与数据库的 mTLS 验证
+* `GITHUB_TOKEN`：用于从仓库获取证书绕过 Serverless 环境变量限制，非 EdgeOne Pages 部署或未遇到环境变量限制时可忽略
 * `ALTCHA_HMAC_KEY`：Altcha 验证码校验字符串
 * `REFRESH_TOKEN`：后端 Workers 缓存服务向服务器请求更新缓存时验证的字符串，相同即为验证通过
 
@@ -38,7 +39,7 @@
 
 * `QML_API`：API服务器访问地址，必须支持 HTTPS
 * `REFRESH_TOKEN`：向服务器请求更新缓存时验证的字符串
-* `Cron`：设置为 `*/30 * * * *`，每 30 分钟向服务器请求更新缓存
+* `Cron`：设置为 `*/5 * * * *`，每 5 分钟向服务器请求更新缓存
 
 ## 接口列表
 

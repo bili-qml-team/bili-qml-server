@@ -114,8 +114,7 @@ async function executeStatusScript(bvid: string, userId: string): Promise<[numbe
     } catch (err: any) {
         if (err.message.includes('NOSCRIPT')) {
             // 脚本丢失
-            const luaScript = `return {redis.call('sismember', KEYS[1], ARGV[1]), redis.call('hget', KEYS[2], ARGV[2])}`;
-            await redis.script("LOAD", luaScript);
+            await redis.script("LOAD", statusScriptLua);
             return redis.evalsha(statusScriptSha, 2, `voted:${bvid}`, `video:${bvid}`, userId || '', 'votesTotal') as Promise<[number, string | null]>;
         }
         throw err;
@@ -127,6 +126,7 @@ async function executeVoteScript(bvid: string, userId: string, timestamp: number
         return redis.evalsha(voteScriptSha, 3, `voted:${bvid}`, `video:${bvid}`, 'votes:recent', userId, 'votesTotal', timestamp, `${bvid}:${userId}`) as Promise<number>;
     } catch (err: any) {
         if (err.message.includes('NOSCRIPT')) {
+            await redis.script("LOAD", voteScriptLua);
             return redis.evalsha(voteScriptSha, 3, `voted:${bvid}`, `video:${bvid}`, 'votes:recent', userId, 'votesTotal', timestamp, `${bvid}:${userId}`) as Promise<number>;
         }
         throw err;
@@ -138,6 +138,7 @@ async function executeUnvoteScript(bvid: string, userId: string): Promise<number
         return redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal') as Promise<number>;
     } catch (err: any) {
         if (err.message.includes('NOSCRIPT')) {
+            await redis.script("LOAD", unvoteScriptLua);
             return redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal') as Promise<number>;
         }
         throw err;

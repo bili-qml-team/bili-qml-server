@@ -24,23 +24,11 @@ const RATE_LIMIT_LEADERBOARD_WINDOW: number = Number(process.env.RATE_LIMIT_LEAD
 const statusScriptLua: string = `return {redis.call('sismember', KEYS[1], ARGV[1]), redis.call('hget', KEYS[2], ARGV[2])}`;
 const statusScriptSha: string = "f0c6a6a82f3fa5cd22bb667e27c5ba1b1fcdbd33";
 
-const voteScriptLua: string = `local voted = redis.call('sadd', KEYS[1], ARGV[1])
-if voted == 1 then
-    redis.call('hincrby', KEYS[2], ARGV[2], 1)
-    redis.call('zadd', KEYS[3], ARGV[3], ARGV[4])
-end
-return voted`;
+const voteScriptLua: string = `local voted = redis.call('sadd', KEYS[1], ARGV[1])\nif voted == 1 then\n    redis.call('hincrby', KEYS[2], ARGV[2], 1)\n    redis.call('zadd', KEYS[3], ARGV[3], ARGV[4])\nend\nreturn voted`;
+const voteScriptSha: string = "fdd1c85ca528240976fa7af8fcce32536eadc271";
 
-const voteScriptSha: string = "0fe3b89cc326eb68e7340e3d499849f3a8c10a6a";
-
-const unvoteScriptLua: string = `local isMember = redis.call('sismember', KEYS[1], ARGV[1])
-if isMember == 1 then
-    redis.call('srem', KEYS[1], ARGV[1])
-    redis.call('zrem', KEYS[2], ARGV[2])
-    redis.call('hincrby', KEYS[3], ARGV[3], -1)
-end
-return isMember`;
-const unvoteScriptSha: string = "086585adf9a3113ca5d9ad8af20b5df60d08bcde";
+const unvoteScriptLua: string = `local isMember = redis.call('sismember', KEYS[1], ARGV[1])\nif isMember == 1 then\n    redis.call('srem', KEYS[1], ARGV[1])\n    redis.call('zrem', KEYS[2], ARGV[2])\n    redis.call('hincrby', KEYS[3], ARGV[3], -1)\nend\nreturn isMember`;
+const unvoteScriptSha: string = "8c7c993d5352c20a6d0d270d862cc50c00a6cacd";
 
 // 使用 Redis 作为缓存并在 worker 刷新，见worker.js
 

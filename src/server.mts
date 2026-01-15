@@ -8,7 +8,7 @@ import type { Challenge } from 'altcha-lib/types';
 const app: express.Application = express();
 
 const TIMESTAMP_EXPIRE_MS: number = Number(process.env.TIMESTAMP_EXPIRE_MS) || 180 * 24 * 3600 * 1000; //排行榜总数据过期时间
-const leaderboardTimeInterval: number[] = [24 * 3600 * 1000, 7 * 24 * 3600 * 1000, 30 * 24 * 3600 * 1000]; //排行榜相差时间
+const leaderboardTimeInterval: number[] = [12 * 3600 * 1000, 24 * 3600 * 1000, 7 * 24 * 3600 * 1000, 30 * 24 * 3600 * 1000]; //排行榜相差时间
 
 // Altcha 配置
 const ALTCHA_HMAC_KEY: string = process.env.ALTCHA_HMAC_KEY || 'bili-qml-default-hmac-key-change-in-production';
@@ -35,7 +35,7 @@ const redis: Redis = new Redis({
 });
 // 频率限制器：检查并增加计数
 async function checkRateLimit(key: string, maxRequests: number, windowSeconds: number): Promise<boolean> {
-    const current = await redis.incr(key);
+    const current: number = await redis.incr(key);
     if (current === 1) {
         await redis.expire(key, windowSeconds);
     }
@@ -80,9 +80,6 @@ async function getCachedLeaderBoard(range: string): Promise<{ bvid: string, coun
 }
 
 async function getLeaderBoard(range: string): Promise<{ bvid: string, count: number }[] | null> {
-    if (range === 'realtime') {
-        return await getLeaderBoardFromTime(12 * 3600 * 1000); //过去12小时
-    }
     return await getCachedLeaderBoard(range);
 }
 
@@ -174,24 +171,23 @@ app.get(["/api/refresh", "/refresh"], async (req: express.Request, res: express.
     const token: string | undefined = authHeader && authHeader.split(" ")[1];
     // simple token check
     if (!token || token !== process.env.REFRESH_TOKEN) {
-        return res.status(403).json({ message: "Token missing" });
+        return res.status(403).json({ success: false, error: "Token missing" });
     }
     try {
-        const leaderBoardCache: { caches: { bvid: string, count: number }[][] } = {
-            caches: await Promise.all(leaderboardTimeInterval.map((time) => {
+        const leaderBoardCaches: { bvid: string, count: number }[][] = await Promise.all(leaderboardTimeInterval.map((time) => {
                 return getLeaderBoardFromTime(time);
-            }))
-        };
+            }));
         console.log('Leaderboard cache updated.');
         await Promise.all([
-            redis.hset('caches:leaderboard', 'daily', JSON.stringify(leaderBoardCache.caches[0])),
-            redis.hset('caches:leaderboard', 'weekly', JSON.stringify(leaderBoardCache.caches[1])),
-            redis.hset('caches:leaderboard', 'monthly', JSON.stringify(leaderBoardCache.caches[2])),
+            redis.hset('caches:leaderboard', 'realtime', JSON.stringify(leaderBoardCaches[0])),
+            redis.hset('caches:leaderboard', 'daily', JSON.stringify(leaderBoardCaches[1])),
+            redis.hset('caches:leaderboard', 'weekly', JSON.stringify(leaderBoardCaches[2])),
+            redis.hset('caches:leaderboard', 'monthly', JSON.stringify(leaderBoardCaches[3])),
         ]);
         return res.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Leaderboard Cache Update Error:', error);
-        return res.status(500).json({ success: false, error: 'Failed to refresh cache' });
+        return res.status(500).json({ success: false, error: error.message });
     }
 });
 

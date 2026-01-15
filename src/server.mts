@@ -142,7 +142,6 @@ async function executeUnvoteScript(bvid: string, userId: string): Promise<number
             redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal')
         ]);
         return res as Promise<number>;
-、
     }
 }
 

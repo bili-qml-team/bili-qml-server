@@ -20,7 +20,32 @@ const RATE_LIMIT_VOTE_WINDOW: number = Number(process.env.RATE_LIMIT_VOTE_WINDOW
 const RATE_LIMIT_LEADERBOARD_MAX: number = Number(process.env.RATE_LIMIT_LEADERBOARD_MAX) || 20; // 排行榜最大次数
 const RATE_LIMIT_LEADERBOARD_WINDOW: number = Number(process.env.RATE_LIMIT_LEADERBOARD_WINDOW) || 300; // 排行榜窗口（秒）
 
-// 使用Workers KV作为缓存，见worker.js
+// Redis Lua 脚本预加载
+const statusScriptLua: string = `return {redis.call('sismember', KEYS[1], ARGV[1]), redis.call('hget', KEYS[2], ARGV[2])}`;
+const statusScriptSha: string = "f0c6a6a82f3fa5cd22bb667e27c5ba1b1fcdbd33";
+
+const voteScriptLua: string = `
+local voted = redis.call('sadd', KEYS[1], ARGV[1])
+if voted == 1 then
+    redis.call('hincrby', KEYS[2], ARGV[2], 1)
+    redis.call('zadd', KEYS[3], ARGV[3], ARGV[4])
+end
+return voted
+`;
+const voteScriptSha: string = "fbc91ddb7100ed0cff405081f1f9a2a2060b5931";
+
+const unvoteScriptLua: string = `
+local isMember = redis.call('sismember', KEYS[1], ARGV[1])
+if isMember == 1 then
+    redis.call('srem', KEYS[1], ARGV[1])
+    redis.call('zrem', KEYS[2], ARGV[2])
+    redis.call('hincrby', KEYS[3], ARGV[3], -1)
+end
+return isMember
+`;
+const unvoteScriptSha: string = "190c0373eaba600592be6e87ddfea511309faf35";
+
+// 使用 Redis 作为缓存并在 worker 刷新，见worker.js
 
 const redis: Redis = new Redis({
     host: process.env.UPSTASH_REDIS_REST_URL,
@@ -81,6 +106,42 @@ async function getCachedLeaderBoard(range: string): Promise<{ bvid: string, coun
 
 async function getLeaderBoard(range: string): Promise<{ bvid: string, count: number }[] | null> {
     return await getCachedLeaderBoard(range);
+}
+
+async function executeStatusScript(bvid: string, userId: string): Promise<[number, string | null]> {
+    try {
+        return redis.evalsha(statusScriptSha, 2, `voted:${bvid}`, `video:${bvid}`, userId || '', 'votesTotal') as Promise<[number, string | null]>;
+    } catch (err: any) {
+        if (err.message.includes('NOSCRIPT')) {
+            // 脚本丢失
+            const luaScript = `return {redis.call('sismember', KEYS[1], ARGV[1]), redis.call('hget', KEYS[2], ARGV[2])}`;
+            await redis.script("LOAD", luaScript);
+            return redis.evalsha(statusScriptSha, 2, `voted:${bvid}`, `video:${bvid}`, userId || '', 'votesTotal') as Promise<[number, string | null]>;
+        }
+        throw err;
+    }
+}
+
+async function executeVoteScript(bvid: string, userId: string, timestamp: number): Promise<number> {
+    try {
+        return redis.evalsha(voteScriptSha, 3, `voted:${bvid}`, `video:${bvid}`, 'votes:recent', userId, 'votesTotal', timestamp, `${bvid}:${userId}`) as Promise<number>;
+    } catch (err: any) {
+        if (err.message.includes('NOSCRIPT')) {
+            return redis.evalsha(voteScriptSha, 3, `voted:${bvid}`, `video:${bvid}`, 'votes:recent', userId, 'votesTotal', timestamp, `${bvid}:${userId}`) as Promise<number>;
+        }
+        throw err;
+    }
+}
+
+async function executeUnvoteScript(bvid: string, userId: string): Promise<number> {
+    try {
+        return redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal') as Promise<number>;
+    } catch (err: any) {
+        if (err.message.includes('NOSCRIPT')) {
+            return redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal') as Promise<number>;
+        }
+        throw err;
+    }
 }
 
 // 服务器逻辑区
@@ -175,8 +236,8 @@ app.get(["/api/refresh", "/refresh"], async (req: express.Request, res: express.
     }
     try {
         const leaderBoardCaches: { bvid: string, count: number }[][] = await Promise.all(leaderboardTimeInterval.map((time) => {
-                return getLeaderBoardFromTime(time);
-            }));
+            return getLeaderBoardFromTime(time);
+        }));
         console.log('Leaderboard cache updated.');
         await Promise.all([
             redis.hset('caches:leaderboard', 'realtime', JSON.stringify(leaderBoardCaches[0])),
@@ -233,17 +294,10 @@ app.post(['/api/vote', '/vote'], async (req, res) => {
             }
         }
 
-        // 3. 用户投票记录
-        const voted: number = await redis.sadd(`voted:${bvid}`, userId);
-        if (voted === 0) return res.status(400).json({ success: false, error: 'Already Voted' });
-        // 总票统计
-
-        // 排行榜时间戳记录
+        // 3. 用户投票记录（使用 Lua 脚本原子操作）
         const now: number = Date.now();
-        await Promise.all([
-            redis.hincrby(`video:${bvid}`, 'votesTotal', 1),
-            redis.zadd('votes:recent', now, `${bvid}:${userId}`)
-        ]);
+        const voted: number = await executeVoteScript(String(bvid), String(userId), now);
+        if (voted === 0) return res.status(400).json({ success: false, error: 'Already Voted' });
         res.json({ success: true });
     } catch (error: any) {
         console.error('Vote Error:', error);
@@ -274,14 +328,8 @@ app.post(['/api/unvote', '/unvote'], async (req: express.Request, res: express.R
             }
         }
 
-        const isMember: number = await redis.sismember(`voted:${bvid}`, userId);
+        const isMember: number = await executeUnvoteScript(String(bvid), String(userId));
         if (!isMember) return res.status(400).json({ error: 'Not voted yet' });
-        // 总票处理
-        await Promise.all([
-            redis.srem(`voted:${bvid}`, userId),           // 删除投票记录
-            redis.zrem('votes:recent', `${bvid}:${userId}`), // 删除排行榜记录
-            redis.hincrby(`video:${bvid}`, 'votesTotal', -1)
-        ]);
         res.json({ success: true });
     } catch (error: any) {
         console.error('Vote Error:', error);
@@ -293,10 +341,7 @@ app.post(['/api/unvote', '/unvote'], async (req: express.Request, res: express.R
 app.get(['/api/status', '/status'], async (req: express.Request, res: express.Response) => {
     const { bvid, userId }: { bvid?: string; userId?: string } = req.query;
     try {
-        const [isVoted, totalCount]: [number, string | null] = await Promise.all([
-            redis.sismember(`voted:${bvid}`, userId || ''),
-            redis.hget(`video:${bvid}`, 'votesTotal')
-        ]);
+        const [isVoted, totalCount]: [number, string | null] = await executeStatusScript(String(bvid), String(userId));
         res.json({ success: true, active: !!isVoted, count: Number(totalCount) || 0 });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });

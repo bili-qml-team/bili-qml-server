@@ -2,17 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import { Redis } from 'ioredis';
-import { createChallenge, verifySolution } from 'altcha-lib';
-import type { Challenge } from 'altcha-lib/types';
+import { createCaptchaChallengeHandler, createRateLimitMiddleware } from './altcha.mts';
+import { createRefreshLeaderBoardHandler, createGetLeaderBoardHandler } from './leaderboard.mts';
 
 const app: express.Application = express();
-
-const TIMESTAMP_EXPIRE_MS: number = Number(process.env.TIMESTAMP_EXPIRE_MS) || 180 * 24 * 3600 * 1000; //排行榜总数据过期时间
-const leaderboardTimeInterval: number[] = [12 * 3600 * 1000, 24 * 3600 * 1000, 7 * 24 * 3600 * 1000, 30 * 24 * 3600 * 1000]; //排行榜相差时间
-
-// Altcha 配置
-const ALTCHA_HMAC_KEY: string = process.env.ALTCHA_HMAC_KEY || 'bili-qml-default-hmac-key-change-in-production';
-const ALTCHA_COMPLEXITY: number = Number(process.env.ALTCHA_COMPLEXITY) || 250000; // PoW 难度
 
 // 频率限制配置
 const RATE_LIMIT_VOTE_MAX: number = Number(process.env.RATE_LIMIT_VOTE_MAX) || 10; // 投票最大次数
@@ -43,99 +36,6 @@ const redis: Redis = new Redis({
         ca: `${process.env.REDIS_TLS_CACERT}`
     }
 });
-// 频率限制器：检查并增加计数
-async function checkRateLimit(key: string, maxRequests: number, windowSeconds: number): Promise<boolean> {
-    const current: number = await redis.incr(key);
-    if (current === 1) {
-        await redis.expire(key, windowSeconds);
-    }
-    return current > maxRequests;
-}
-
-// 重置频率限制（CAPTCHA 验证通过后）
-async function resetRateLimit(key: string) {
-    await redis.del(key);
-}
-
-// Rate Limit 中间件工厂函数
-interface RateLimitOptions {
-    max: number;
-    window: number;
-    keyGenerator: (req: express.Request) => string;
-}
-
-function createRateLimitMiddleware(options: RateLimitOptions): express.RequestHandler {
-    return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-        try {
-            const key: string = options.keyGenerator(req);
-            const isRateLimited: boolean = await checkRateLimit(key, options.max, options.window);
-
-            // 存储到 res.locals 供后续处理器使用
-            res.locals.rateLimitKey = key;
-            res.locals.isRateLimited = isRateLimited;
-
-            // 如果未被限制，直接放行
-            if (!isRateLimited) {
-                return next();
-            }
-
-            // 如果被限制，检查是否有 CAPTCHA 解决方案
-            const altcha: string | undefined = req.body?.altcha || req.query?.altcha as string | undefined;
-
-            if (altcha) {
-                const isValid: boolean = await verifySolution(altcha, ALTCHA_HMAC_KEY);
-                if (!isValid) {
-                    return res.status(400).json({ success: false, error: 'Invalid CAPTCHA', requiresCaptcha: true });
-                }
-                // CAPTCHA 验证通过，重置频率限制
-                await resetRateLimit(key);
-                return next();
-            }
-
-            // 没有 CAPTCHA，要求客户端完成验证
-            return res.status(429).json({ success: false, error: 'Rate limit exceeded', requiresCaptcha: true });
-        } catch (error: any) {
-            console.error('Rate Limit Middleware Error:', error);
-            return res.status(500).json({ success: false, error: 'Rate limit check failed' });
-        }
-    };
-}
-
-async function getLeaderBoardFromTime(periodMs: number = 24 * 3600 * 1000, limit: number = 30): Promise<{ bvid: string, count: number }[]> {
-    const now: number = Date.now();
-    const minTime: number = now - periodMs;
-    const counts: { [key: string]: number } = {};
-    const [_, recentVotes] = await Promise.all([
-        redis.zremrangebyscore('votes:recent', '-inf', now - TIMESTAMP_EXPIRE_MS - 1),
-        redis.zrangebyscore('votes:recent', minTime, now)
-    ]);
-    for (const member of recentVotes) {
-        const bvid: string = member.split(':')[0];  // 从 `${bvid}:${userId}` 提取
-        counts[bvid] = (counts[bvid] || 0) + 1;
-    }
-    const sorted: [string, number][] = Object.entries(counts)
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .slice(0, limit);
-    return sorted.map((array) => { return { bvid: array[0], count: array[1] } });
-}
-
-async function getCachedLeaderBoard(range: string): Promise<{ bvid: string, count: number }[] | null> {
-    try {
-        const response: string | null = await redis.hget('caches:leaderboard', range);
-        if (!response) {
-            console.warn(`No cached leaderboard found for range: ${range}`);
-            return null;
-        }
-        return JSON.parse(response);
-    } catch (error) {
-        console.error(`Error fetching cached leaderboard for ${range}:`, error);
-        return null;
-    }
-}
-
-async function getLeaderBoard(range: string): Promise<{ bvid: string, count: number }[] | null> {
-    return await getCachedLeaderBoard(range);
-}
 
 async function executeStatusScript(bvid: string, userId: string): Promise<[number, string | null]> {
     try {
@@ -273,49 +173,14 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
 });
 
 // EdgeOne Pages不支持定时任务自动刷新，提供手动刷新接口，由外部定时任务调用
-app.get(["/api/refresh", "/refresh"], async (req: express.Request, res: express.Response) => {
-    const authHeader: string | undefined = req.headers["authorization"];
-    const token: string | undefined = authHeader && authHeader.split(" ")[1];
-    // simple token check
-    if (!token || token !== process.env.REFRESH_TOKEN) {
-        return res.status(403).json({ success: false, error: "Token missing" });
-    }
-    try {
-        const leaderBoardCaches: { bvid: string, count: number }[][] = await Promise.all(leaderboardTimeInterval.map((time) => {
-            return getLeaderBoardFromTime(time);
-        }));
-        console.log('Leaderboard cache updated.');
-        await Promise.all([
-            redis.hset('caches:leaderboard', 'realtime', JSON.stringify(leaderBoardCaches[0])),
-            redis.hset('caches:leaderboard', 'daily', JSON.stringify(leaderBoardCaches[1])),
-            redis.hset('caches:leaderboard', 'weekly', JSON.stringify(leaderBoardCaches[2])),
-            redis.hset('caches:leaderboard', 'monthly', JSON.stringify(leaderBoardCaches[3])),
-        ]);
-        return res.json({ success: true });
-    } catch (error: any) {
-        console.error('Leaderboard Cache Update Error:', error);
-        return res.status(500).json({ success: false, error: error.message });
-    }
-});
+app.get(["/api/refresh", "/refresh"], createRefreshLeaderBoardHandler(redis));
 
 // Altcha 挑战端点
-app.get(['/api/altcha/challenge', '/altcha/challenge'], async (req: express.Request, res: express.Response) => {
-    try {
-        const challenge: Challenge = await createChallenge({
-            hmacKey: ALTCHA_HMAC_KEY,
-            maxNumber: ALTCHA_COMPLEXITY,
-            algorithm: 'SHA-256',
-        });
-        res.json(challenge);
-    } catch (error) {
-        console.error('Altcha Challenge Error:', error);
-        res.status(500).json({ success: false, error: 'Failed to create challenge' });
-    }
-});
+app.get(['/api/altcha/challenge', '/altcha/challenge'], createCaptchaChallengeHandler());
 
 // 处理投票
 app.post(['/api/vote', '/vote'],
-    createRateLimitMiddleware({
+    createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => `ratelimit:vote:${req.body.userId}`
@@ -340,7 +205,7 @@ app.post(['/api/vote', '/vote'],
 );
 
 app.post(['/api/unvote', '/unvote'],
-    createRateLimitMiddleware({
+    createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => `ratelimit:vote:${req.body.userId}`
@@ -375,7 +240,7 @@ app.get(['/api/status', '/status'], async (req: express.Request, res: express.Re
 
 // 获取排行榜
 app.get(['/api/leaderboard', '/leaderboard'],
-    createRateLimitMiddleware({
+    createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_LEADERBOARD_MAX,
         window: RATE_LIMIT_LEADERBOARD_WINDOW,
         keyGenerator: (req) => {
@@ -383,22 +248,7 @@ app.get(['/api/leaderboard', '/leaderboard'],
             return `ratelimit:leaderboard:${clientIP}`;
         }
     }),
-    async (req: express.Request, res: express.Response) => {
-        const { range = 'realtime' }: { range?: string } = req.query;
-        if (range !== 'realtime' && range !== 'daily' && range !== 'weekly' && range !== 'monthly') {
-            return res.status(400).json({ success: false, error: 'Invalid range' });
-        }
-
-        try {
-            const board: { bvid: string; count: number }[] | null = await getLeaderBoard(range);
-            if (!board) {
-                return res.json({ success: false, list: [] });
-            }
-            res.json({ success: true, list: board });
-        } catch (error: any) {
-            res.status(500).json({ success: false, error: error.message });
-        }
-    }
+    createGetLeaderBoardHandler(redis)
 );
 
 // app.listen(3000);

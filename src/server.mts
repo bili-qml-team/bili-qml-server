@@ -57,6 +57,50 @@ async function resetRateLimit(key: string) {
     await redis.del(key);
 }
 
+// Rate Limit 中间件工厂函数
+interface RateLimitOptions {
+    max: number;
+    window: number;
+    keyGenerator: (req: express.Request) => string;
+}
+
+function createRateLimitMiddleware(options: RateLimitOptions): express.RequestHandler {
+    return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+        try {
+            const key: string = options.keyGenerator(req);
+            const isRateLimited: boolean = await checkRateLimit(key, options.max, options.window);
+
+            // 存储到 res.locals 供后续处理器使用
+            res.locals.rateLimitKey = key;
+            res.locals.isRateLimited = isRateLimited;
+
+            // 如果未被限制，直接放行
+            if (!isRateLimited) {
+                return next();
+            }
+
+            // 如果被限制，检查是否有 CAPTCHA 解决方案
+            const altcha: string | undefined = req.body?.altcha || req.query?.altcha as string | undefined;
+
+            if (altcha) {
+                const isValid: boolean = await verifySolution(altcha, ALTCHA_HMAC_KEY);
+                if (!isValid) {
+                    return res.status(400).json({ success: false, error: 'Invalid CAPTCHA', requiresCaptcha: true });
+                }
+                // CAPTCHA 验证通过，重置频率限制
+                await resetRateLimit(key);
+                return next();
+            }
+
+            // 没有 CAPTCHA，要求客户端完成验证
+            return res.status(429).json({ success: false, error: 'Rate limit exceeded', requiresCaptcha: true });
+        } catch (error: any) {
+            console.error('Rate Limit Middleware Error:', error);
+            return res.status(500).json({ success: false, error: 'Rate limit check failed' });
+        }
+    };
+}
+
 async function getLeaderBoardFromTime(periodMs: number = 24 * 3600 * 1000, limit: number = 30): Promise<{ bvid: string, count: number }[]> {
     const now: number = Date.now();
     const minTime: number = now - periodMs;
@@ -270,74 +314,53 @@ app.get(['/api/altcha/challenge', '/altcha/challenge'], async (req: express.Requ
 });
 
 // 处理投票
-app.post(['/api/vote', '/vote'], async (req, res) => {
-    try {
-        const { bvid, userId, altcha }: { bvid?: string; userId?: string; altcha?: string } = req.body;
+app.post(['/api/vote', '/vote'],
+    createRateLimitMiddleware({
+        max: RATE_LIMIT_VOTE_MAX,
+        window: RATE_LIMIT_VOTE_WINDOW,
+        keyGenerator: (req) => `ratelimit:vote:${req.body.userId}`
+    }),
+    async (req, res) => {
+        try {
+            const { bvid, userId }: { bvid?: string; userId?: string } = req.body;
 
-        // 1. 基础参数校验
-        if (!bvid || !userId) return res.status(400).json({ success: false, error: 'Missing params' });
+            // 1. 基础参数校验
+            if (!bvid || !userId) return res.status(400).json({ success: false, error: 'Missing params' });
 
-        const rateLimitKey: string = `ratelimit:vote:${userId}`;
-        const isRateLimited: boolean = await checkRateLimit(rateLimitKey, RATE_LIMIT_VOTE_MAX, RATE_LIMIT_VOTE_WINDOW);
-
-        // 2. 检查频率限制
-        if (isRateLimited) {
-            // 如果有 Altcha 解决方案，验证它
-            if (altcha) {
-                const isValid: boolean = await verifySolution(altcha, ALTCHA_HMAC_KEY);
-                if (!isValid) {
-                    return res.status(400).json({ success: false, error: 'Invalid CAPTCHA', requiresCaptcha: true });
-                }
-                // CAPTCHA 验证通过，重置频率限制
-                await resetRateLimit(rateLimitKey);
-            } else {
-                // 没有 CAPTCHA，要求客户端完成验证
-                return res.status(429).json({ success: false, error: 'Rate limit exceeded', requiresCaptcha: true });
-            }
+            // 2. 用户投票记录（使用 Lua 脚本原子操作）
+            const now: number = Date.now();
+            const voted: number = await executeVoteScript(String(bvid), String(userId), now);
+            if (voted === 0) return res.status(400).json({ success: false, error: 'Already Voted' });
+            res.json({ success: true });
+        } catch (error: any) {
+            console.error('Vote Error:', error);
+            res.status(500).json({ success: false, error: error.message });
         }
-
-        // 3. 用户投票记录（使用 Lua 脚本原子操作）
-        const now: number = Date.now();
-        const voted: number = await executeVoteScript(String(bvid), String(userId), now);
-        if (voted === 0) return res.status(400).json({ success: false, error: 'Already Voted' });
-        res.json({ success: true });
-    } catch (error: any) {
-        console.error('Vote Error:', error);
-        res.status(500).json({ success: false, error: error.message });
     }
-});
+);
 
-app.post(['/api/unvote', '/unvote'], async (req: express.Request, res: express.Response) => {
-    try {
-        const { bvid, userId, altcha }: { bvid?: string; userId?: string; altcha?: string } = req.body;
+app.post(['/api/unvote', '/unvote'],
+    createRateLimitMiddleware({
+        max: RATE_LIMIT_VOTE_MAX,
+        window: RATE_LIMIT_VOTE_WINDOW,
+        keyGenerator: (req) => `ratelimit:vote:${req.body.userId}`
+    }),
+    async (req: express.Request, res: express.Response) => {
+        try {
+            const { bvid, userId }: { bvid?: string; userId?: string } = req.body;
 
-        // 1. 基础参数校验
-        if (!bvid || !userId) return res.status(400).json({ success: false, error: 'Missing params' });
+            // 1. 基础参数校验
+            if (!bvid || !userId) return res.status(400).json({ success: false, error: 'Missing params' });
 
-        const rateLimitKey: string = `ratelimit:vote:${userId}`;
-        const isRateLimited: boolean = await checkRateLimit(rateLimitKey, RATE_LIMIT_VOTE_MAX, RATE_LIMIT_VOTE_WINDOW);
-
-        // 2. 检查频率限制
-        if (isRateLimited) {
-            if (altcha) {
-                const isValid: boolean = await verifySolution(altcha, ALTCHA_HMAC_KEY);
-                if (!isValid) {
-                    return res.status(400).json({ success: false, error: 'Invalid CAPTCHA', requiresCaptcha: true });
-                }
-                await resetRateLimit(rateLimitKey);
-            } else {
-                return res.status(429).json({ success: false, error: 'Rate limit exceeded', requiresCaptcha: true });
-            }
+            const isMember: number = await executeUnvoteScript(String(bvid), String(userId));
+            if (!isMember) return res.status(400).json({ error: 'Not voted yet' });
+            res.json({ success: true });
+        } catch (error: any) {
+            console.error('Vote Error:', error);
+            res.status(500).json({ success: false, error: error.message });
         }
-
-        const isMember: number = await executeUnvoteScript(String(bvid), String(userId));
-        if (!isMember) return res.status(400).json({ error: 'Not voted yet' });
-        res.json({ success: true });
-    } catch (error: any) {
-        console.error('Vote Error:', error);
-        res.status(500).json({ success: false, error: error.message });
     }
-});
+);
 
 // 获取状态
 app.get(['/api/status', '/status'], async (req: express.Request, res: express.Response) => {
@@ -351,63 +374,32 @@ app.get(['/api/status', '/status'], async (req: express.Request, res: express.Re
 });
 
 // 获取排行榜
-app.get(['/api/leaderboard', '/leaderboard'], async (req: express.Request, res: express.Response) => {
-    const { range = 'realtime', altcha }: { range?: string; altcha?: string } = req.query;
-    if (range !== 'realtime' && range !== 'daily' && range !== 'weekly' && range !== 'monthly') {
-        return res.status(400).json({ success: false, error: 'Invalid range' });
-    }
+app.get(['/api/leaderboard', '/leaderboard'],
+    createRateLimitMiddleware({
+        max: RATE_LIMIT_LEADERBOARD_MAX,
+        window: RATE_LIMIT_LEADERBOARD_WINDOW,
+        keyGenerator: (req) => {
+            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            return `ratelimit:leaderboard:${clientIP}`;
+        }
+    }),
+    async (req: express.Request, res: express.Response) => {
+        const { range = 'realtime' }: { range?: string } = req.query;
+        if (range !== 'realtime' && range !== 'daily' && range !== 'weekly' && range !== 'monthly') {
+            return res.status(400).json({ success: false, error: 'Invalid range' });
+        }
 
-    try {
-        // 使用 IP 作为频率限制标识（排行榜是公开的，不需要 userId）
-        const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
-        const rateLimitKey: string = `ratelimit:leaderboard:${clientIP}`;
-        const isRateLimited: boolean = await checkRateLimit(rateLimitKey, RATE_LIMIT_LEADERBOARD_MAX, RATE_LIMIT_LEADERBOARD_WINDOW);
-
-        if (isRateLimited) {
-            if (altcha) {
-                const isValid: boolean = await verifySolution(altcha, ALTCHA_HMAC_KEY);
-                if (!isValid) {
-                    return res.status(400).json({ success: false, error: 'Invalid CAPTCHA', requiresCaptcha: true });
-                }
-                await resetRateLimit(rateLimitKey);
-            } else {
-                return res.status(429).json({ success: false, error: 'Rate limit exceeded', requiresCaptcha: true });
+        try {
+            const board: { bvid: string; count: number }[] | null = await getLeaderBoard(range);
+            if (!board) {
+                return res.json({ success: false, list: [] });
             }
+            res.json({ success: true, list: board });
+        } catch (error: any) {
+            res.status(500).json({ success: false, error: error.message });
         }
-
-        const board: { bvid: string; count: number }[] | null = await getLeaderBoard(range);
-        if (!board) {
-            return res.json({ success: false, list: [] });
-        }
-        // no type or type != 2: add backward capability
-        // if (!proc_type || proc_type !== 2) {
-        // await Promise.all(list.map(async (item, index) => {
-        //     try {
-        //         const conn = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${item.bvid}`,
-        //             {
-        //                 headers: {
-        //                     "Origin": "https://www.bilibili.com",
-        //                     "Referer": `https://www.bilibili.com/video/${item.bvid}/`,
-        //                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
-        //                 }
-        //             });
-        //         const json = await conn.json();
-        //         if (json.code === 0 && json.data?.title) {
-        //             list[index].title = json.data.title;
-        //         } else {
-        //             list[index].title = '未知标题';
-        //         }
-        //     } catch (err) {
-        //         console.error(`获取标题失败 ${item.bvid}:`, err);
-        //         list[index].title = '加载失败';
-        //     }
-        // }));
-        // }
-        res.json({ success: true, list: board });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
     }
-});
+);
 
 // app.listen(3000);
 export default app;

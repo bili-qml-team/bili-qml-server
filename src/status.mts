@@ -11,11 +11,8 @@ async function executeStatusScript(redis: Redis, bvid: string, userId: string): 
     } catch {
         // 脚本丢失
         try {
-            const [_, res] = await Promise.all([
-                redis.script("LOAD", statusScriptLua),
-                redis.evalsha(statusScriptSha, 2, `voted:${bvid}`, `video:${bvid}`, userId || '', 'votesTotal')
-            ]);
-            return res as Promise<[number, string | null]>;
+            await redis.script("LOAD", statusScriptLua);
+            return await redis.evalsha(statusScriptSha, 2, `voted:${bvid}`, `video:${bvid}`, userId || '', 'votesTotal') as Promise<[number, string | null]>;
         } catch (err: any) {
             err.message = `Load Script Error: ${err.message}, check script sha values.`;
             throw err;

@@ -13,11 +13,8 @@ async function executeVoteScript(redis: Redis, bvid: string, userId: string, tim
         return await redis.evalsha(voteScriptSha, 3, `voted:${bvid}`, `video:${bvid}`, 'votes:recent', userId, 'votesTotal', timestamp, `${bvid}:${userId}`) as Promise<number>;
     } catch {
         try {
-            const [_, res] = await Promise.all([
-                redis.script("LOAD", voteScriptLua),
-                redis.evalsha(voteScriptSha, 3, `voted:${bvid}`, `video:${bvid}`, 'votes:recent', userId, 'votesTotal', timestamp, `${bvid}:${userId}`)
-            ]);
-            return res as Promise<number>;
+            await redis.script("LOAD", voteScriptLua);
+            return await redis.evalsha(voteScriptSha, 3, `voted:${bvid}`, `video:${bvid}`, 'votes:recent', userId, 'votesTotal', timestamp, `${bvid}:${userId}`) as Promise<number>;
         } catch (err: any) {
             err.message = `Load Script Error: ${err.message}, check script sha values.`;
             throw err;
@@ -30,11 +27,8 @@ async function executeUnvoteScript(redis: Redis, bvid: string, userId: string): 
         return await redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal') as Promise<number>;
     } catch {
         try {
-            const [_, res] = await Promise.all([
-                redis.script("LOAD", unvoteScriptLua),
-                redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal')
-            ]);
-            return res as Promise<number>;
+            await redis.script("LOAD", unvoteScriptLua);
+            return await redis.evalsha(unvoteScriptSha, 3, `voted:${bvid}`, 'votes:recent', `video:${bvid}`, userId, `${bvid}:${userId}`, 'votesTotal') as Promise<number>;
         } catch (err: any) {
             err.message = `Load Script Error: ${err.message}, check script sha values.`;
             throw err;

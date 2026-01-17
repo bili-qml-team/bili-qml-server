@@ -121,10 +121,9 @@
         *   `daily`: 日榜
         *   `weekly`: 周榜
         *   `monthly`: 月榜
-    *   `type` (Optional): 数据处理类型。
-        *   若不传或不为 `2`，服务器会尝试调用 B站接口获取视频标题。
-        *   若为 `2`，仅返回 BVID 和票数 (速度更快)。
     *   `altcha` (Optional): 验证码 Payload (用于解除 IP 频率限制)。
+    *   `page` (Optional): 榜单页数，默认为 1。
+        *    有效范围为 `1 - 10`
 *   **Rate Limit**: 每个 IP 每 300 秒最多 20 次。
 *   **Response**:
     ```json

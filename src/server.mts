@@ -3,6 +3,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import { Redis } from 'ioredis';
 import { createCaptchaChallengeHandler, createRateLimitMiddleware } from './altcha.mts';
+import { createGetViewHandler } from './bili.mts';
 import { createRefreshLeaderBoardHandler, createGetLeaderBoardHandler } from './leaderboard.mts';
 import { createGetStatusHandler } from './status.mts';
 import { createPostVoteHandler, createPostUnvoteHandler } from './vote.mts';
@@ -34,6 +35,7 @@ const redis: Redis = new Redis({
 app.use(cors({
     origin: [
         'https://www.bilibili.com',
+        'https://web.bili-qml.com',
         /^chrome-extension:\/\/.+$/,
         /^moz-extension:\/\/.+$/
     ],
@@ -113,6 +115,12 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
 
 // EdgeOne Pages不支持定时任务自动刷新，提供手动刷新接口，由外部定时任务调用
 app.get(["/api/refresh", "/refresh"], createRefreshLeaderBoardHandler(redis));
+
+app.get(['/api/ping', '/ping'], async (req: express.Request, res: express.Response) => {
+    res.json({ status: await redis.ping() });
+});
+
+app.get(['/api/x/web-interface/view', '/x/web-interface/view'], createGetViewHandler());
 
 // Altcha 挑战端点
 app.get(['/api/altcha/challenge', '/altcha/challenge'], createCaptchaChallengeHandler());

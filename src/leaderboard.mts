@@ -6,37 +6,54 @@ const leaderboardTimeInterval: number[] = [12 * 3600 * 1000, 24 * 3600 * 1000, 7
 const PAGE_SIZE: number = 30;
 const MAX_PAGES: number = 10;
 
-const leaderboardLuaScript = `
-local votes = redis.call('ZRANGEBYSCORE', KEYS[1], ARGV[1], ARGV[2])
-local counts = {}
-local videos = {}
+// const leaderboardLuaScript = `
+// local votes = redis.call('ZRANGEBYSCORE', KEYS[1], ARGV[1], ARGV[2])
+// local counts = {}
+// local videos = {}
 
-for _, v in ipairs(votes) do
-    local parts = {}
-    for part in string.gmatch(v, "[^:]+") do
-        table.insert(parts, part)
-    end
-    local bvid = parts[1]
+// for _, v in ipairs(votes) do
+//     local parts = {}
+//     for part in string.gmatch(v, "[^:]+") do
+//         table.insert(parts, part)
+//     end
+//     local bvid = parts[1]
     
-    if counts[bvid] == nil then
-        counts[bvid] = 0
-        table.insert(videos, bvid)
-    end
-    counts[bvid] = counts[bvid] + 1
-end
+//     if counts[bvid] == nil then
+//         counts[bvid] = 0
+//         table.insert(videos, bvid)
+//     end
+//     counts[bvid] = counts[bvid] + 1
+// end
 
-table.sort(videos, function(a, b)
-    return counts[a] > counts[b]
-end)
+// table.sort(videos, function(a, b)
+//     return counts[a] > counts[b]
+// end)
 
-local limit = tonumber(ARGV[3])
-local result = {}
-for i = 1, math.min(#videos, limit) do
-    table.insert(result, videos[i])
-    table.insert(result, counts[videos[i]])
-end
-return result
-`;
+// local limit = tonumber(ARGV[3])
+// local result = {}
+// for i = 1, math.min(#videos, limit) do
+//     table.insert(result, videos[i])
+//     table.insert(result, counts[videos[i]])
+// end
+// return result
+// `;
+const leaderboardScript = `local votes = redis.call('ZRANGEBYSCORE', KEYS[1], ARGV[1], ARGV[2])\nlocal counts = {}\nlocal videos = {}\nfor _, v in ipairs(votes) do\n    local parts = {}\n    for part in string.gmatch(v, "[^:]+") do\n        table.insert(parts, part)\n    end\n    local bvid = parts[1]\n    \n    if counts[bvid] == nil then\n        counts[bvid] = 0\n        table.insert(videos, bvid)\n    end\n    counts[bvid] = counts[bvid] + 1\nend\ntable.sort(videos, function(a, b)\n    return counts[a] > counts[b]\nend)\nlocal limit = tonumber(ARGV[3])\nlocal result = {}\nfor i = 1, math.min(#videos, limit) do\n    table.insert(result, videos[i])\n    table.insert(result, counts[videos[i]])\nend\nreturn result`;
+const leaderboardScriptSha: string = "becc0d589f7b2611dd0c6d3b45c111628d763105";
+
+async function executeLeaderboardScript(redis: Redis, minTime: number, maxTime: number, limit: number): Promise<(string | number)[]> {
+    try {
+        return await redis.evalsha(leaderboardScriptSha, 1, 'votes:recent', minTime, maxTime, limit) as Promise<(string | number)[]>;
+    } catch {
+        // 脚本丢失
+        try {
+            await redis.script("LOAD", leaderboardScript);
+            return await redis.evalsha(leaderboardScriptSha, 1, 'votes:recent', minTime, maxTime, limit) as Promise<(string | number)[]>;
+        } catch (err: any) {
+            err.message = `Load Script Error: ${err.message}, check script sha values.`;
+            throw err;
+        }
+    }
+}
 
 async function getLeaderBoardFromTime(redis: Redis, periodMs: number, limit: number = PAGE_SIZE * MAX_PAGES): Promise<{ bvid: string, count: number }[]> {
     const now: number = Date.now();
@@ -46,7 +63,7 @@ async function getLeaderBoardFromTime(redis: Redis, periodMs: number, limit: num
         // 先清理过期数据
         await redis.zremrangebyscore('votes:recent', '-inf', now - TIMESTAMP_EXPIRE_MS - 1);
 
-        const result: (string | number)[] = await redis.eval(leaderboardLuaScript, 1, 'votes:recent', minTime, now, limit) as (string | number)[];
+        const result: (string | number)[] = await executeLeaderboardScript(redis, minTime, now, limit);
 
         const leaderboard: { bvid: string, count: number }[] = [];
         for (let i = 0; i < result.length; i += 2) {

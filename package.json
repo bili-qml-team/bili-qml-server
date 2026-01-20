@@ -24,7 +24,7 @@
     "inject-cert": "node src/tools/inject-cert.mjs",
     "build": "npx tsc -p .",
     "eo-deploy": "npm-run-all inject-cert build eo",
-    "eo": "node src/tools/eo-deploy.cjs dist/server.mjs",
+    "eo": "node src/tools/eo-deploy.cjs dist",
     "start": "node dist/server.mjs"
   }
 }

@@ -3,7 +3,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import { Redis } from 'ioredis';
 import { createCaptchaChallengeHandler, createRateLimitMiddleware } from './altcha.mts';
-import { createGetViewHandler } from './bili.mts';
+import { createGetViewHandler, createArchiveImageProxyHandler } from './bili.mts';
 import { createRefreshLeaderBoardHandler, createGetLeaderBoardHandler } from './leaderboard.mts';
 import { createGetStatusHandler } from './status.mts';
 import { createPostVoteHandler, createPostUnvoteHandler } from './vote.mts';
@@ -15,6 +15,8 @@ const RATE_LIMIT_VOTE_MAX: number = Number(process.env.RATE_LIMIT_VOTE_MAX) || 1
 const RATE_LIMIT_VOTE_WINDOW: number = Number(process.env.RATE_LIMIT_VOTE_WINDOW) || 300; // 投票窗口（秒）
 const RATE_LIMIT_LEADERBOARD_MAX: number = Number(process.env.RATE_LIMIT_LEADERBOARD_MAX) || 20; // 排行榜最大次数
 const RATE_LIMIT_LEADERBOARD_WINDOW: number = Number(process.env.RATE_LIMIT_LEADERBOARD_WINDOW) || 300; // 排行榜窗口（秒）
+const RATE_LIMIT_IMAGE_PROXY_MAX: number = Number(process.env.RATE_LIMIT_IMAGE_PROXY_MAX) || 50; // 图片中转最大次数
+const RATE_LIMIT_IMAGE_PROXY_WINDOW: number = Number(process.env.RATE_LIMIT_IMAGE_PROXY_WINDOW) || 60; // 图片中转窗口（秒）
 
 // 使用 Redis 作为缓存并在 worker 刷新，见worker.js
 
@@ -122,6 +124,19 @@ app.get(['/api/ping', '/ping'], async (req: express.Request, res: express.Respon
 });
 
 app.get(['/api/x/web-interface/view', '/x/web-interface/view'], createGetViewHandler());
+
+// B站 archive 图片中转（带速率限制和 altcha 验证）
+app.get(['/api/bfs/archive/:path(*)', '/bfs/archive/:path(*)'],
+    createRateLimitMiddleware(redis, {
+        max: RATE_LIMIT_IMAGE_PROXY_MAX,
+        window: RATE_LIMIT_IMAGE_PROXY_WINDOW,
+        keyGenerator: (req) => {
+            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            return `ratelimit:image_proxy:${clientIP}`;
+        }
+    }),
+    createArchiveImageProxyHandler()
+);
 
 // Altcha 挑战端点
 app.get(['/api/altcha/challenge', '/altcha/challenge'], createCaptchaChallengeHandler());

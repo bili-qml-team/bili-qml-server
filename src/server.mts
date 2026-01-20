@@ -39,6 +39,8 @@ app.use(cors({
         'https://www.bilibili.com',
         'https://web.bili-qml.com',
         'https://bilitest.vhuds.com',
+        'http://127.0.0.1:5500',
+        'http://localhost:5500',
         /^chrome-extension:\/\/.+$/,
         /^moz-extension:\/\/.+$/
     ],

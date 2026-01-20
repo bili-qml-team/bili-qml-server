@@ -36,6 +36,7 @@ app.use(cors({
     origin: [
         'https://www.bilibili.com',
         'https://web.bili-qml.com',
+        'https://bilitest.vhuds.com/',
         /^chrome-extension:\/\/.+$/,
         /^moz-extension:\/\/.+$/
     ],

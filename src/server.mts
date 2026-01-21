@@ -3,7 +3,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import { Redis } from 'ioredis';
 import { createCaptchaChallengeHandler, createRateLimitMiddleware } from './altcha.mts';
-import { createGetViewHandler, createArchiveImageProxyHandler } from './bili.mts';
+import { createGetViewHandler } from './bili.mts';
 import { createRefreshLeaderBoardHandler, createGetLeaderBoardHandler } from './leaderboard.mts';
 import { createGetStatusHandler } from './status.mts';
 import { createPostVoteHandler, createPostUnvoteHandler } from './vote.mts';
@@ -39,6 +39,8 @@ app.use(cors({
         'https://www.bilibili.com',
         'https://web.bili-qml.com',
         'https://bilitest.vhuds.com',
+        'http://127.0.0.1:5500',
+        'http://localhost:5500',
         /^chrome-extension:\/\/.+$/,
         /^moz-extension:\/\/.+$/
     ],
@@ -124,19 +126,6 @@ app.get(['/api/ping', '/ping'], async (req: express.Request, res: express.Respon
 });
 
 app.get(['/api/x/web-interface/view', '/x/web-interface/view'], createGetViewHandler());
-
-// B站 archive 图片中转（带速率限制和 altcha 验证）
-app.get(['/api/bfs/archive/:path(*)', '/bfs/archive/:path(*)'],
-    createRateLimitMiddleware(redis, {
-        max: RATE_LIMIT_IMAGE_PROXY_MAX,
-        window: RATE_LIMIT_IMAGE_PROXY_WINDOW,
-        keyGenerator: (req) => {
-            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
-            return `ratelimit:image_proxy:${clientIP}`;
-        }
-    }),
-    createArchiveImageProxyHandler()
-);
 
 // Altcha 挑战端点
 app.get(['/api/altcha/challenge', '/altcha/challenge'], createCaptchaChallengeHandler());

@@ -5,7 +5,7 @@ import type { Challenge } from "altcha-lib/types";
 
 // Altcha 配置
 const ALTCHA_HMAC_KEY: string = process.env.ALTCHA_HMAC_KEY || 'bili-qml-default-hmac-key-change-in-production';
-const ALTCHA_COMPLEXITY: number = Number(process.env.ALTCHA_COMPLEXITY) || 250000; // PoW 难度
+const ALTCHA_COMPLEXITY: number = Number(process.env.ALTCHA_COMPLEXITY) || 2500000000000; // PoW 难度
 
 async function checkRateLimit(redis: Redis, key: string, maxRequests: number, windowSeconds: number): Promise<boolean> {
     const current: number | undefined = await redis.incr(key);
@@ -40,6 +40,7 @@ function createRateLimitMiddleware(redis: Redis, options: RateLimitOptions): exp
             if (!isRateLimited) {
                 return next();
             }
+            return res.status(429).json({ success: false, error: '你太快了！或者，你可能不是人类？' });
 
             // 如果被限制，检查是否有 CAPTCHA 解决方案
             const altcha: string | undefined = req.body?.altcha || req.query?.altcha as string | undefined;

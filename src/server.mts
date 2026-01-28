@@ -133,7 +133,10 @@ app.post(['/api/vote', '/vote'],
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
-        keyGenerator: (req) => `ratelimit:vote:${req.body.userId}`
+        keyGenerator: (req) => {
+            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            return `ratelimit:leaderboard:${clientIP}`;
+        }
     }),
     createPostVoteHandler(redis)
 );
@@ -142,7 +145,10 @@ app.post(['/api/unvote', '/unvote'],
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
-        keyGenerator: (req) => `ratelimit:vote:${req.body.userId}`
+        keyGenerator: (req) => {
+            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            return `ratelimit:leaderboard:${clientIP}`;
+        }
     }),
     createPostUnvoteHandler(redis)
 );

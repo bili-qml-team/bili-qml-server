@@ -15,8 +15,6 @@ const RATE_LIMIT_VOTE_MAX: number = Number(process.env.RATE_LIMIT_VOTE_MAX) || 1
 const RATE_LIMIT_VOTE_WINDOW: number = Number(process.env.RATE_LIMIT_VOTE_WINDOW) || 300; // 投票窗口（秒）
 const RATE_LIMIT_LEADERBOARD_MAX: number = Number(process.env.RATE_LIMIT_LEADERBOARD_MAX) || 20; // 排行榜最大次数
 const RATE_LIMIT_LEADERBOARD_WINDOW: number = Number(process.env.RATE_LIMIT_LEADERBOARD_WINDOW) || 300; // 排行榜窗口（秒）
-const RATE_LIMIT_IMAGE_PROXY_MAX: number = Number(process.env.RATE_LIMIT_IMAGE_PROXY_MAX) || 50; // 图片中转最大次数
-const RATE_LIMIT_IMAGE_PROXY_WINDOW: number = Number(process.env.RATE_LIMIT_IMAGE_PROXY_WINDOW) || 60; // 图片中转窗口（秒）
 
 // 使用 Redis 作为缓存并在 worker 刷新，见worker.js
 
@@ -135,7 +133,10 @@ app.post(['/api/vote', '/vote'],
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
-        keyGenerator: (req) => `ratelimit:vote:${req.body.userId}`
+        keyGenerator: (req) => {
+            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            return `ratelimit:leaderboard:${clientIP}`;
+        }
     }),
     createPostVoteHandler(redis)
 );
@@ -144,7 +145,10 @@ app.post(['/api/unvote', '/unvote'],
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
-        keyGenerator: (req) => `ratelimit:vote:${req.body.userId}`
+        keyGenerator: (req) => {
+            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            return `ratelimit:leaderboard:${clientIP}`;
+        }
     }),
     createPostUnvoteHandler(redis)
 );

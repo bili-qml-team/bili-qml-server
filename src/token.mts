@@ -167,7 +167,8 @@ function createTokenVerifyHandler(): express.RequestHandler {
             const attrValue: number | undefined = typeof data.attr === 'number'
                 ? data.attr
                 : Number.isFinite(Number(data.attr)) ? Number(data.attr) : undefined;
-            if (!cookieHeader && typeof attrValue === 'number' && attrValue !== 0) {
+            const isPrivate = typeof attrValue === 'number' ? (attrValue & 1) === 1 : undefined;
+            if (!cookieHeader && isPrivate === true) {
                 return res.status(403).json({ success: false, error: 'Private folder' });
             }
             const now: number = Math.floor(Date.now() / 1000);

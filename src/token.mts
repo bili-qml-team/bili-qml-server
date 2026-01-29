@@ -1,7 +1,7 @@
 import express from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
 
-const JWT_SECRET: string = process.env.JWT_SECRET || '';
+const JWT_SECRET: string = process.env.JWT_SECRET || 'change-it-in-producation';
 const BILI_SESSDATA: string | undefined = process.env.BILI_SESSDATA;
 const BILI_CSRF: string | undefined = process.env.BILI_CSRF;
 const JWT_ALG: string = 'HS256';

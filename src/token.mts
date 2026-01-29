@@ -2,8 +2,6 @@ import express from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
 
 const JWT_SECRET: string = process.env.JWT_SECRET || 'change-it-in-producation';
-const BILI_SESSDATA: string | undefined = process.env.BILI_SESSDATA;
-const BILI_CSRF: string | undefined = process.env.BILI_CSRF;
 const JWT_ALG: string = 'HS256';
 const TOKEN_TTL_SECONDS: number = 30 * 24 * 60 * 60;
 const CHALLENGE_LENGTH: number = 8;
@@ -92,22 +90,12 @@ function verifyJwt(token: string): JwtPayload | null {
     return { uid: String(payload.uid), exp: payload.exp };
 }
 
-function buildCookieHeader(): string | undefined {
-    if (!BILI_SESSDATA || !BILI_CSRF) {
-        return undefined;
-    }
-    return `SESSDATA=${BILI_SESSDATA}; bili_jct=${BILI_CSRF}`;
-}
-
 function createTokenFavNameHandler(): express.RequestHandler {
     return async (req: express.Request, res: express.Response) => {
         try {
             const { userId }: { userId?: string } = req.body;
             if (!userId) {
                 return res.status(400).json({ success: false, error: 'Missing params' });
-            }
-            if (!/^\d+$/.test(userId)) {
-                return res.status(400).json({ success: false, error: 'Invalid User ID' });
             }
             const name: string = createChallengeName(userId);
             return res.json({ success: true, name });
@@ -125,14 +113,10 @@ function createTokenVerifyHandler(): express.RequestHandler {
             if (!userId || !mediaId) {
                 return res.status(400).json({ success: false, error: 'Missing params' });
             }
-            if (!/^\d+$/.test(userId)) {
-                return res.status(400).json({ success: false, error: 'Invalid User ID' });
-            }
             if (!JWT_SECRET) {
                 return res.status(500).json({ success: false, error: 'JWT secret missing' });
             }
             const expectedName: string = createChallengeName(userId);
-            const cookieHeader: string | undefined = buildCookieHeader();
             const headers: Record<string, string> = {
                 "Accept": "*/*",
                 "Accept-Encoding": "gzip, deflate, br",
@@ -141,9 +125,6 @@ function createTokenVerifyHandler(): express.RequestHandler {
                 "Referer": "https://www.bilibili.com",
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
             };
-            if (cookieHeader) {
-                headers.Cookie = cookieHeader;
-            }
             const response: Response = await fetch(`https://api.bilibili.com/x/v3/fav/folder/info?media_id=${encodeURIComponent(mediaId)}`,
                 {
                     method: 'GET',
@@ -164,14 +145,15 @@ function createTokenVerifyHandler(): express.RequestHandler {
             if (data.title !== expectedName) {
                 return res.status(403).json({ success: false, error: 'Invalid challenge name' });
             }
-            const attrValue: number | undefined = typeof data.attr === 'number'
-                ? data.attr
-                : Number.isFinite(Number(data.attr)) ? Number(data.attr) : undefined;
+            const attrValue: number = data.attr
             const isPrivate = typeof attrValue === 'number' ? (attrValue & 1) === 1 : undefined;
-            if (!cookieHeader && isPrivate === true) {
+            if (isPrivate) {
                 return res.status(403).json({ success: false, error: 'Private folder' });
             }
             const now: number = Math.floor(Date.now() / 1000);
+            if (data.ctime < now - 15 * 60) {
+                return res.status(403).json({ success: false, error: 'Challenge expired' });
+            }
             const token: string = signJwt({ uid: String(userId), exp: now + TOKEN_TTL_SECONDS });
             return res.json({ success: true, token });
         } catch (error: any) {

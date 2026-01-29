@@ -1,4 +1,3 @@
-import { Redis } from 'ioredis';
 import express from 'express';
 
 

@@ -7,6 +7,7 @@ import { createGetViewHandler } from './bili.mts';
 import { createRefreshLeaderBoardHandler, createGetLeaderBoardHandler } from './leaderboard.mts';
 import { createGetStatusHandler } from './status.mts';
 import { createPostVoteHandler, createPostUnvoteHandler } from './vote.mts';
+import { createJwtAuthMiddleware, createTokenFavNameHandler, createTokenVerifyHandler } from './token.mts';
 
 const app: express.Application = express();
 
@@ -128,8 +129,13 @@ app.get(['/api/x/web-interface/view', '/x/web-interface/view'], createGetViewHan
 // Altcha 挑战端点
 app.get(['/api/altcha/challenge', '/altcha/challenge'], createCaptchaChallengeHandler());
 
+// Token 端点
+app.post(['/api/token/fav-name', '/token/fav-name'], createTokenFavNameHandler());
+app.post(['/api/token/verify', '/token/verify'], createTokenVerifyHandler());
+
 // 处理投票
 app.post(['/api/vote', '/vote'],
+    createJwtAuthMiddleware(),
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
@@ -142,6 +148,7 @@ app.post(['/api/vote', '/vote'],
 );
 
 app.post(['/api/unvote', '/unvote'],
+    createJwtAuthMiddleware(),
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,

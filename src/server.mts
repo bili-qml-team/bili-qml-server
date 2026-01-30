@@ -141,7 +141,7 @@ app.post(['/api/vote', '/vote'],
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => {
             const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
-            return `ratelimit:leaderboard:${clientIP}`;
+            return `ratelimit:vote:${clientIP}`;
         }
     }),
     createPostVoteHandler(redis)
@@ -154,7 +154,7 @@ app.post(['/api/unvote', '/unvote'],
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => {
             const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
-            return `ratelimit:leaderboard:${clientIP}`;
+            return `ratelimit:vote:${clientIP}`;
         }
     }),
     createPostUnvoteHandler(redis)

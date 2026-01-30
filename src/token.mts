@@ -77,10 +77,7 @@ function verifyJwt(token: string): JwtPayload | null {
     const signingInput: string = `${headerPart}.${payloadPart}`;
     const expectedSignature: Buffer = createHmac('sha256', JWT_SECRET).update(signingInput).digest();
     const signature: Buffer = base64UrlDecode(signaturePart);
-    if (signature.length !== expectedSignature.length) {
-        return null;
-    }
-    if (!timingSafeEqual(signature, expectedSignature)) {
+    if ((signature.length !== expectedSignature.length) || !timingSafeEqual(signature, expectedSignature)) {
         return null;
     }
     const now: number = Math.floor(Date.now() / 1000);
@@ -145,13 +142,12 @@ function createTokenVerifyHandler(): express.RequestHandler {
             if (data.title !== expectedName) {
                 return res.status(403).json({ success: false, error: 'Invalid challenge name' });
             }
-            const attrValue: number = data.attr
-            const isPrivate = typeof attrValue === 'number' ? (attrValue & 1) === 1 : undefined;
+            const isPrivate = typeof data.attr === 'number' ? (data.attr & 1) === 1 : undefined;
             if (isPrivate) {
                 return res.status(403).json({ success: false, error: 'Private folder' });
             }
             const now: number = Math.floor(Date.now() / 1000);
-            if (data.ctime < now - 15 * 60) {
+            if (data.ctime < now - 15) {
                 return res.status(403).json({ success: false, error: 'Challenge expired' });
             }
             const token: string = signJwt({ uid: String(userId), exp: now + TOKEN_TTL_SECONDS });

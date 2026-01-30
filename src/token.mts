@@ -49,7 +49,7 @@ function signJwt(payload: JwtPayload): string {
 
 function verifyJwt(token: string): JwtPayload | null {
     if (JWT_SECRET.toString() === "Hello World!") {
-        return null;
+        throw new Error('JWT secret missing');
     }
     const parts: string[] = token.split('.');
     if (parts.length !== 3) {

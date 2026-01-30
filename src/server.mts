@@ -135,7 +135,6 @@ app.post(['/api/token/verify', '/token/verify'], createTokenVerifyHandler());
 
 // 处理投票
 app.post(['/api/vote', '/vote'],
-    createJwtAuthMiddleware(),
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
@@ -144,11 +143,11 @@ app.post(['/api/vote', '/vote'],
             return `ratelimit:vote:${clientIP}`;
         }
     }),
+    createJwtAuthMiddleware(),
     createPostVoteHandler(redis)
 );
 
 app.post(['/api/unvote', '/unvote'],
-    createJwtAuthMiddleware(),
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
@@ -157,6 +156,7 @@ app.post(['/api/unvote', '/unvote'],
             return `ratelimit:vote:${clientIP}`;
         }
     }),
+    createJwtAuthMiddleware(),
     createPostUnvoteHandler(redis)
 );
 

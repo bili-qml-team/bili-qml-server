@@ -1,7 +1,7 @@
 import express from 'express';
 import { createHmac, timingSafeEqual } from 'crypto';
 
-const JWT_SECRET: string = process.env.JWT_SECRET || 'change-it-in-producation';
+const JWT_SECRET: Buffer = Buffer.from(process.env.JWT_SECRET || 'SGVsbG8gV29ybGQh', "base64");
 const JWT_ALG: string = 'HS256';
 const TOKEN_TTL_SECONDS: number = 30 * 24 * 60 * 60;
 const CHALLENGE_LENGTH: number = 8;
@@ -23,7 +23,7 @@ function base64UrlDecode(input: string): Buffer {
 }
 
 function createChallengeName(userId: string): string {
-    if (!JWT_SECRET) {
+    if (JWT_SECRET.toString() === "Hello World!") {
         throw new Error('JWT secret missing');
     }
     const digest: string = createHmac('sha256', JWT_SECRET).update(userId).digest('hex');
@@ -34,7 +34,7 @@ function createChallengeName(userId: string): string {
 }
 
 function signJwt(payload: JwtPayload): string {
-    if (!JWT_SECRET) {
+    if (JWT_SECRET.toString() === "Hello World!") {
         throw new Error('JWT secret missing');
     }
     const header: { alg: string; typ: string } = { alg: JWT_ALG, typ: 'JWT' };
@@ -48,7 +48,7 @@ function signJwt(payload: JwtPayload): string {
 }
 
 function verifyJwt(token: string): JwtPayload | null {
-    if (!JWT_SECRET) {
+    if (JWT_SECRET.toString() === "Hello World!") {
         return null;
     }
     const parts: string[] = token.split('.');

@@ -8,10 +8,15 @@ const ALTCHA_HMAC_KEY: string = process.env.ALTCHA_HMAC_KEY || 'bili-qml-default
 const ALTCHA_COMPLEXITY: number = Number(process.env.ALTCHA_COMPLEXITY) || 2500000000000; // PoW 难度
 
 async function checkRateLimit(redis: Redis, key: string, maxRequests: number, windowSeconds: number): Promise<boolean> {
-    const current: number | undefined = await redis.incr(key);
-    if (current === 1) {
-        await redis.expire(key, windowSeconds);
-    }
+    // 使用 Lua 脚本确保原子性：第一次时设置过期，之后就不再更新
+    const lua = `
+        local current = redis.call('INCR', KEYS[1])
+        if current == 1 then
+            redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+        end
+        return current
+    `;
+    const current = await redis.eval(lua, 1, key, windowSeconds) as number;
     return current > maxRequests;
 }
 

@@ -169,7 +169,7 @@ app.get(['/api/leaderboard', '/leaderboard'],
         max: RATE_LIMIT_LEADERBOARD_MAX,
         window: RATE_LIMIT_LEADERBOARD_WINDOW,
         keyGenerator: (req) => {
-            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            const clientIP: string = (req.headers['EO-Connecting-IP'] as string) || (req.headers['x-vercel-forwarded-for'] as string) || req.ip || '';
             return `ratelimit:leaderboard:${clientIP}`;
         }
     }),

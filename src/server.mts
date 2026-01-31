@@ -139,7 +139,7 @@ app.post(['/api/vote', '/vote'],
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => {
-            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            const clientIP: string = (req.headers['EO-Connecting-IP'] as string) || (req.headers['x-vercel-forwarded-for'] as string) || req.ip || '';
             return `ratelimit:vote:${clientIP}`;
         }
     }),
@@ -152,7 +152,7 @@ app.post(['/api/unvote', '/unvote'],
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => {
-            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            const clientIP: string = (req.headers['EO-Connecting-IP'] as string) || (req.headers['x-vercel-forwarded-for'] as string) || req.ip || '';
             return `ratelimit:vote:${clientIP}`;
         }
     }),

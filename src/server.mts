@@ -121,6 +121,10 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
 app.get(["/api/refresh", "/refresh"], createRefreshLeaderBoardHandler(redis));
 
 app.get(['/api/ping', '/ping'], async (req: express.Request, res: express.Response) => {
+    const { refresh_token } = req.query;
+    if (refresh_token !== process.env.REFRESH_TOKEN) {
+        return res.status(403).json({ status: 'Forbidden' });
+    }
     res.json({ status: await redis.ping() });
 });
 

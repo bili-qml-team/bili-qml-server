@@ -7,6 +7,7 @@ import { createGetViewHandler } from './bili.mts';
 import { createRefreshLeaderBoardHandler, createGetLeaderBoardHandler } from './leaderboard.mts';
 import { createGetStatusHandler } from './status.mts';
 import { createPostVoteHandler, createPostUnvoteHandler } from './vote.mts';
+import { createJwtAuthMiddleware, createTokenFavNameHandler, createTokenVerifyHandler } from './token.mts';
 
 const app: express.Application = express();
 
@@ -120,6 +121,10 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
 app.get(["/api/refresh", "/refresh"], createRefreshLeaderBoardHandler(redis));
 
 app.get(['/api/ping', '/ping'], async (req: express.Request, res: express.Response) => {
+    const { refresh_token } = req.query;
+    if (refresh_token !== process.env.REFRESH_TOKEN) {
+        return res.status(403).json({ status: 'Forbidden' });
+    }
     res.json({ status: await redis.ping() });
 });
 
@@ -128,16 +133,21 @@ app.get(['/api/x/web-interface/view', '/x/web-interface/view'], createGetViewHan
 // Altcha 挑战端点
 app.get(['/api/altcha/challenge', '/altcha/challenge'], createCaptchaChallengeHandler());
 
+// Token 端点
+app.post(['/api/token/fav-name', '/token/fav-name'], createTokenFavNameHandler());
+app.post(['/api/token/verify', '/token/verify'], createTokenVerifyHandler());
+
 // 处理投票
 app.post(['/api/vote', '/vote'],
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => {
-            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
-            return `ratelimit:leaderboard:${clientIP}`;
+            const clientIP: string = (req.headers['EO-Client-IP'] as string) || (req.headers['x-vercel-forwarded-for'] as string) || req.ip || '';
+            return `ratelimit:vote:${clientIP}`;
         }
     }),
+    createJwtAuthMiddleware(),
     createPostVoteHandler(redis)
 );
 
@@ -146,10 +156,11 @@ app.post(['/api/unvote', '/unvote'],
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => {
-            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
-            return `ratelimit:leaderboard:${clientIP}`;
+            const clientIP: string = (req.headers['EO-Client-IP'] as string) || (req.headers['x-vercel-forwarded-for'] as string) || req.ip || '';
+            return `ratelimit:vote:${clientIP}`;
         }
     }),
+    createJwtAuthMiddleware(),
     createPostUnvoteHandler(redis)
 );
 
@@ -162,7 +173,7 @@ app.get(['/api/leaderboard', '/leaderboard'],
         max: RATE_LIMIT_LEADERBOARD_MAX,
         window: RATE_LIMIT_LEADERBOARD_WINDOW,
         keyGenerator: (req) => {
-            const clientIP: string = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+            const clientIP: string = (req.headers['EO-Client-IP'] as string) || (req.headers['x-vercel-forwarded-for'] as string) || req.ip || '';
             return `ratelimit:leaderboard:${clientIP}`;
         }
     }),

@@ -4,7 +4,7 @@ const path = require("path");
 
 const cwd = process.cwd();
 // Allow passing source filename as the first CLI argument (defaults to server.js)
-const targetFiles = ["altcha.mjs", "bili.mjs", "leaderboard.mjs", "server.mjs", "status.mjs", "vote.mjs"];
+const targetFiles = ["altcha.mjs", "bili.mjs", "leaderboard.mjs", "server.mjs", "status.mjs", "token.mjs", "vote.mjs"];
 const outputPathArg = process.argv[2];
 const destDir = path.join(cwd, "node-functions");
 

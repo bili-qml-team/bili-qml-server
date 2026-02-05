@@ -5,7 +5,7 @@ import type { Challenge } from "altcha-lib/types";
 
 // Altcha 配置
 const ALTCHA_HMAC_KEY: string = process.env.ALTCHA_HMAC_KEY || 'bili-qml-default-hmac-key-change-in-production';
-const ALTCHA_COMPLEXITY: number = Number(process.env.ALTCHA_COMPLEXITY) || 2500000; // PoW 难度
+const ALTCHA_COMPLEXITY: number = Number(process.env.ALTCHA_COMPLEXITY) || 1000000; // PoW 难度
 
 async function checkRateLimit(redis: Redis, key: string, maxRequests: number, windowSeconds: number): Promise<boolean> {
     // 使用 Lua 脚本确保原子性：第一次时设置过期，之后就不再更新

@@ -5,7 +5,7 @@ import type { Challenge } from "altcha-lib/types";
 
 // Altcha 配置
 const ALTCHA_HMAC_KEY: string = process.env.ALTCHA_HMAC_KEY || 'bili-qml-default-hmac-key-change-in-production';
-const ALTCHA_COMPLEXITY: number = Number(process.env.ALTCHA_COMPLEXITY) || 2500000000000; // PoW 难度
+const ALTCHA_COMPLEXITY: number = Number(process.env.ALTCHA_COMPLEXITY) || 1000000; // PoW 难度
 
 async function checkRateLimit(redis: Redis, key: string, maxRequests: number, windowSeconds: number): Promise<boolean> {
     // 使用 Lua 脚本确保原子性：第一次时设置过期，之后就不再更新
@@ -45,23 +45,23 @@ function createRateLimitMiddleware(redis: Redis, options: RateLimitOptions): exp
             if (!isRateLimited) {
                 return next();
             }
-            return res.status(429).json({ success: false, error: '你太快了！或者，你可能不是人类？' });
+            // return res.status(429).json({ success: false, error: '你太快了！或者，你可能不是人类？' });
 
             // 如果被限制，检查是否有 CAPTCHA 解决方案
-            // const altcha: string | undefined = req.body?.altcha || req.query?.altcha as string | undefined;
+            const altcha: string | undefined = req.body?.altcha || req.query?.altcha as string | undefined;
 
-            // if (altcha) {
-            //     const isValid: boolean = await verifySolution(altcha, ALTCHA_HMAC_KEY);
-            //     if (!isValid) {
-            //         return res.status(400).json({ success: false, error: 'Invalid CAPTCHA', requiresCaptcha: true });
-            //     }
-            //     // CAPTCHA 验证通过，重置频率限制
-            //     await resetRateLimit(redis, key);
-            //     return next();
-            // }
+            if (altcha) {
+                const isValid: boolean = await verifySolution(altcha, ALTCHA_HMAC_KEY);
+                if (!isValid) {
+                    return res.status(400).json({ success: false, error: 'Invalid CAPTCHA', requiresCaptcha: true });
+                }
+                // CAPTCHA 验证通过，重置频率限制
+                await resetRateLimit(redis, key);
+                return next();
+            }
 
-            // // 没有 CAPTCHA，要求客户端完成验证
-            // return res.status(429).json({ success: false, error: 'Rate limit exceeded', requiresCaptcha: true });
+            // 没有 CAPTCHA，要求客户端完成验证
+            return res.status(429).json({ success: false, error: '你太快了！或者，你可能不是人类？', requiresCaptcha: true });
         } catch (error: any) {
             console.error('Rate Limit Middleware Error:', error);
             return res.status(500).json({ success: false, error: 'Rate limit check failed' });

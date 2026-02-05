@@ -169,7 +169,7 @@ function createJwtAuthMiddleware(): express.RequestHandler {
             const authHeader: string = req.headers.authorization || '';
             const match: RegExpMatchArray | null = authHeader.match(/^Bearer\s+(.+)$/i);
             if (!match) {
-                return res.status(401).json({ success: false, error: 'Unauthorized' });
+                return res.status(401).json({ success: false, error: 'Token缺失，请更新插件版本至1.3或以上' });
             }
             const payload: JwtPayload | null = verifyJwt(match[1].trim());
             if (!payload) {

@@ -145,8 +145,8 @@ app.post(['/api/vote', '/vote'],
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => {
-            const clientIP: string = (req.headers['EO-Client-IP'] as string) || (req.headers['x-vercel-forwarded-for'] as string) || req.ip || '';
-            return `ratelimit:vote:${clientIP}`;
+            const client: string = (req.headers['x-vercel-forwarded-for'] as string) || req.body.userId || '';
+            return `ratelimit:vote:${client}`;
         }
     }),
     createJwtAuthMiddleware(),
@@ -158,9 +158,8 @@ app.post(['/api/unvote', '/unvote'],
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
         keyGenerator: (req) => {
-            console.log(`EO IP: ${req.headers['EO-Real-Client-IP']}`);
-            const clientIP: string = (req.headers['EO-Real-Client-IP'] as string) || (req.headers['x-vercel-forwarded-for'] as string) || req.ip || '';
-            return `ratelimit:vote:${clientIP}`;
+            const client: string = (req.headers['x-vercel-forwarded-for'] as string) || req.body.userId || '';
+            return `ratelimit:vote:${client}`;
         }
     }),
     createJwtAuthMiddleware(),
@@ -171,17 +170,7 @@ app.post(['/api/unvote', '/unvote'],
 app.get(['/api/status', '/status'], createGetStatusHandler(redis));
 
 // 获取排行榜
-app.get(['/api/leaderboard', '/leaderboard'],
-    createRateLimitMiddleware(redis, {
-        max: RATE_LIMIT_LEADERBOARD_MAX,
-        window: RATE_LIMIT_LEADERBOARD_WINDOW,
-        keyGenerator: (req) => {
-            const clientIP: string = (req.headers['EO-Real-Client-IP'] as string) || (req.headers['x-vercel-forwarded-for'] as string) || req.ip || '';
-            return `ratelimit:leaderboard:${clientIP}`;
-        }
-    }),
-    createGetLeaderBoardHandler(redis)
-);
+app.get(['/api/leaderboard', '/leaderboard'], createGetLeaderBoardHandler(redis));
 
 // app.listen(3000);
 export default app;

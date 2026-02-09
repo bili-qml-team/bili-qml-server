@@ -18,13 +18,21 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
-    "dotenv": "17.2.3"
+    "dotenv": "17.2.3",
+    "@cloudflare/vitest-pool-workers": "^0.12.4",
+		"vitest": "~3.2.0",
+		"wrangler": "^4.63.0"
   },
   "scripts": {
     "inject-cert": "node src/tools/inject-cert.mjs",
-    "build": "npx tsc -p .",
+    "build": "npx tsc -p . --noEmit false",
     "eo-deploy": "npm-run-all inject-cert build eo",
     "eo": "node src/tools/eo-deploy.cjs dist",
-    "start": "node dist/server.mjs"
+    "start": "node dist/server.mjs",
+    "cf-deploy": "wrangler deploy",
+		"cf-dev": "wrangler dev",
+		"cf-start": "wrangler dev",
+		"cf-test": "vitest",
+		"cf-typegen": "wrangler types"
   }
 }

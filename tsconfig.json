@@ -37,7 +37,10 @@
         "verbatimModuleSyntax": true,
         "rewriteRelativeImportExtensions": true
     },
-    "exclude": ["test"],
+    "exclude": [
+		"test",
+		"src/index.mts"
+	],
     "include": [
         "src"
     ]

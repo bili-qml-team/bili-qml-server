@@ -29,13 +29,13 @@ async function resetRateLimit(redis: Redis, key: string): Promise<void> {
 interface RateLimitOptions {
     max: number;
     window: number;
-    keyGenerator: (req: express.Request) => string;
+    keyGenerator: (req: express.Request, res: express.Response) => string;
 }
 
 function createRateLimitMiddleware(redis: Redis, options: RateLimitOptions): express.RequestHandler {
     return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
         try {
-            const key: string = options.keyGenerator(req);
+            const key: string = options.keyGenerator(req, res);
             const isRateLimited: boolean = await checkRateLimit(redis, key, options.max, options.window);
             // 存储到 res.locals 供后续处理器使用
             res.locals.rateLimitKey = key;

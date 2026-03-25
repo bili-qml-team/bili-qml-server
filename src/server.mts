@@ -138,28 +138,34 @@ app.post(['/api/token/verify', '/token/verify'], createTokenVerifyHandler());
 
 // 处理投票
 app.post(['/api/vote', '/vote'],
+    createJwtAuthMiddleware(),
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
-        keyGenerator: (req) => {
-            const client: string = (req.headers['x-vercel-forwarded-for'] as string) || req.body.userId || '';
-            return `ratelimit:vote:${client}`;
+        keyGenerator: (_req, res) => {
+            const jwtUid: unknown = res.locals.jwtUid;
+            if (!jwtUid) {
+                throw new Error('JWT identity missing for rate limiting');
+            }
+            return `ratelimit:vote:${String(jwtUid)}`;
         }
     }),
-    createJwtAuthMiddleware(),
     createPostVoteHandler(redis)
 );
 
 app.post(['/api/unvote', '/unvote'],
+    createJwtAuthMiddleware(),
     createRateLimitMiddleware(redis, {
         max: RATE_LIMIT_VOTE_MAX,
         window: RATE_LIMIT_VOTE_WINDOW,
-        keyGenerator: (req) => {
-            const client: string = (req.headers['x-vercel-forwarded-for'] as string) || req.body.userId || '';
-            return `ratelimit:vote:${client}`;
+        keyGenerator: (_req, res) => {
+            const jwtUid: unknown = res.locals.jwtUid;
+            if (!jwtUid) {
+                throw new Error('JWT identity missing for rate limiting');
+            }
+            return `ratelimit:vote:${String(jwtUid)}`;
         }
     }),
-    createJwtAuthMiddleware(),
     createPostUnvoteHandler(redis)
 );
 

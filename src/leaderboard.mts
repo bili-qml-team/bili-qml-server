@@ -1,7 +1,6 @@
 import { Redis } from 'ioredis';
 import express from 'express';
 
-const TIMESTAMP_EXPIRE_MS: number = Number(process.env.TIMESTAMP_EXPIRE_MS) || 180 * 24 * 3600 * 1000; //排行榜总数据过期时间
 const leaderboardTimeInterval: number[] = [12 * 3600 * 1000, 24 * 3600 * 1000, 7 * 24 * 3600 * 1000, 30 * 24 * 3600 * 1000]; //排行榜相差时间
 const PAGE_SIZE: number = 30;
 const MAX_PAGES: number = 10;
@@ -60,9 +59,6 @@ async function getLeaderBoardFromTime(redis: Redis, periodMs: number, limit: num
     const minTime: number = now - periodMs;
 
     try {
-        // 先清理过期数据
-        await redis.zremrangebyscore('votes:recent', '-inf', now - TIMESTAMP_EXPIRE_MS - 1);
-
         const result: (string | number)[] = await executeLeaderboardScript(redis, minTime, now, limit);
 
         const leaderboard: { bvid: string, count: number }[] = [];
